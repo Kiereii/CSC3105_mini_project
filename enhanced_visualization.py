@@ -4,11 +4,35 @@ import numpy as np
 import seaborn as sns
 
 # Load the dataset (all parts)
-import glob, os
-data_dir = '/home/keyreii/Documents/Data Analytics Mini Project/Dataset/UWB-LOS-NLOS-Data-Set/dataset'
-csv_paths = sorted(glob.glob(os.path.join(data_dir, 'uwb_dataset_part*.csv')))
+import glob, os, sys
+from pathlib import Path
+
+# Allow user override of dataset directory via env var or CLI arg
+dataset_override = os.environ.get('DATASET_DIR') or (sys.argv[1] if len(sys.argv) > 1 else None)
+
+# Resolve dataset directory in an OS-independent, repository-relative way.
+# First consider `dataset_override` if provided, then try a dataset folder next to this script,
+# then search parent folders.
+script_dir = Path(__file__).resolve().parent
+possible_dirs = []
+if dataset_override:
+    possible_dirs.append(Path(dataset_override))
+possible_dirs.append(script_dir / 'Dataset' / 'UWB-LOS-NLOS-Data-Set' / 'dataset')
+for p in script_dir.parents:
+    possible_dirs.append(p / 'Dataset' / 'UWB-LOS-NLOS-Data-Set' / 'dataset')
+
+csv_paths = []
+data_dir = None
+for d in possible_dirs:
+    if d and d.exists():
+        csv_paths = sorted(glob.glob(str(d / 'uwb_dataset_part*.csv')))
+        if csv_paths:
+            data_dir = str(d)
+            break
+
 if not csv_paths:
-    raise FileNotFoundError(f'No CSV files found in {data_dir}')
+    attempted = '\n'.join(str(p) for p in possible_dirs)
+    raise FileNotFoundError(f'No CSV files found. Tried the following locations:\n{attempted}')
 df_list = [pd.read_csv(p) for p in csv_paths]
 df = pd.concat(df_list, ignore_index=True)
 print(f"Loaded {len(csv_paths)} files, total rows: {len(df)}")

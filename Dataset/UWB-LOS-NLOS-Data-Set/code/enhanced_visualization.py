@@ -48,12 +48,18 @@ fig, axes = plt.subplots(3, 2, figsize=(20, 18))
 
 # 1 & 2: Sample Signal Plots (Integrity Check)
 axes[0, 0].set_title("Line-of-Sight (LOS) Signal Samples", fontweight='bold')
-for i in range(min(3, len(los_samples))):
+for i in range(min(1016, len(los_samples))):
     axes[0, 0].plot(los_samples.sample(1)[cir_columns].values.flatten(), alpha=0.6)
+# Zoom in tighter (750 to 950) to spread the wave out, ticks every 50
+axes[0, 0].set_xlim(730, 850)
+axes[0, 0].set_xticks(np.arange(730, 851, 10))
 
 axes[0, 1].set_title("Non-Line-of-Sight (NLOS) Signal Samples", fontweight='bold')
-for i in range(min(3, len(nlos_samples))):
+for i in range(min(1016, len(nlos_samples))):
     axes[0, 1].plot(nlos_samples.sample(1)[cir_columns].values.flatten(), alpha=0.6)
+# Match the zoom and ticks exactly
+axes[0, 1].set_xlim(730, 850)
+axes[0, 1].set_xticks(np.arange(730, 851, 10))
 
 # 3. Class Balance (Requirement a.III)
 axes[1, 0].set_title("Dataset Class Balance", fontweight='bold')
@@ -73,7 +79,7 @@ axes[2, 0].legend()
 
 # 6. Outlier Detection (Requirement a.IV)
 axes[2, 1].set_title("Range Outlier Detection", fontweight='bold')
-axes[2, 1].boxplot([los_samples['RANGE'], nlos_samples['RANGE']], labels=['LOS', 'NLOS'])
+axes[2, 1].boxplot([los_samples['RANGE'], nlos_samples['RANGE']], tick_labels=['LOS', 'NLOS'])
 
 plt.tight_layout()
 plt.show()

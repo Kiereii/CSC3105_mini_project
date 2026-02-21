@@ -1,0 +1,29 @@
+RANDOM FOREST CLASSIFICATION RESULTS
+============================================================
+
+Dataset: UWB LOS/NLOS
+Features: 136 (16 core + 120 CIR)
+Training samples: 33,254
+Test samples: 8,314
+
+MODEL CONFIGURATION:
+  - Number of trees: 100
+  - Max depth: None
+  - Random seed: 42
+
+PERFORMANCE METRICS:
+  - Accuracy:  0.8869 (88.69%)
+  - Precision: 0.9203
+  - Recall:    0.8447
+  - F1-Score:  0.8809
+  - ROC-AUC:   0.9535
+
+FEATURE IMPORTANCE SUMMARY:
+  - Core features importance: 0.4637 (46.4%)
+  - CIR features importance:  0.5363 (53.6%)
+
+CONFUSION MATRIX:
+  True LOS predicted as LOS:   3,899
+  True LOS predicted as NLOS:  301
+  True NLOS predicted as LOS:  639
+  True NLOS predicted as NLOS: 3,475

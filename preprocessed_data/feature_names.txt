@@ -1,0 +1,24 @@
+FEATURE NAMES (Option B)
+==================================================
+
+Core Features (16):
+   1. RANGE
+   2. FP_IDX
+   3. FP_AMP1
+   4. FP_AMP2
+   5. FP_AMP3
+   6. STDEV_NOISE
+   7. CIR_PWR
+   8. MAX_NOISE
+   9. RXPACC
+  10. CH
+  11. FRAME_LEN
+  12. PREAM_LEN
+  13. BITRATE
+  14. PRFR
+  15. SNR
+  16. SNR_dB
+
+CIR Features (120):
+  Range: CIR730 to CIR849
+  (First path region based on EDA)

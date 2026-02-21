@@ -1,0 +1,20 @@
+PREPROCESSING INFORMATION
+==================================================
+
+Original dataset size: 41,568 samples
+Training set size: 33,254 samples (80%)
+Test set size: 8,314 samples (20%)
+Number of features: 136
+  - Core features: 16
+  - CIR features: 120 (samples 730-850)
+
+Random seed: 42
+Stratified split: Yes
+
+Generated files:
+  1. X_train_unscaled.npy / X_test_unscaled.npy
+  2. X_train_standard.npy / X_test_standard.npy
+  3. X_train_minmax.npy / X_test_minmax.npy
+  4. y_train.npy / y_test.npy
+  5. scaler_standard.pkl
+  6. scaler_minmax.pkl

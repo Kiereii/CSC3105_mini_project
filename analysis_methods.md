@@ -24,7 +24,7 @@ The UWB LOS/NLOS dataset consists of:
 #### 1.2 Signal Profile Visualization
 - **Purpose**: Compare raw CIR signal characteristics between classes
 - **Method**: 
-  - Plot 3 random samples from each class
+  - Plot 10 random samples from each class
   - Overlay mean CIR profiles for both classes
 - **Insight**: Identifies distinctive temporal patterns that differentiate LOS from NLOS conditions
 

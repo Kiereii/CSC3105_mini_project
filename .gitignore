@@ -1,0 +1,18 @@
+# Ignore trained model pickles and large binary artifacts
+models/**/*.pkl
+models/*.pkl
+
+# Ignore preprocessed binary data and caches
+preprocessed_data/
+*.npy
+
+# Bytecode and editors
+*.pyc
+__pycache__/
+.vscode/
+.idea/
+
+# Temp files
+*~
+.DS_Store
+

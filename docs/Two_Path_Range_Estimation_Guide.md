@@ -36,7 +36,7 @@ The brief states this directly:
 
 > *"If the first path is LOS, the next path will be NLOS.  
 > If the first path is NLOS, the next path will be NLOS too.  
-> LOS is always the shortest path if it exists."*
+> LOS is always the shortest path if it exists"*
 
 Think about it physically:
 - **LOS** = direct line between transmitter and receiver — nothing in the way. This is the **fastest** signal path, so it always arrives first.
@@ -219,16 +219,6 @@ Sample → Tree 3 → predicts 4.0m ─┘
 
 Each tree is trained on a **random subset of data** (bootstrapping) and uses a **random subset of features** at each split. This randomness prevents overfitting — no single tree dominates, and errors cancel each other out across the forest.
 
-### Why Random Forest for Range Estimation?
-
-| Reason | Explanation |
-|--------|-------------|
-| **Non-linear relationships** | Range vs CIR features is not a straight line |
-| **No scaling needed** | Works on raw feature values |
-| **Feature importance** | Tells you which features drive range prediction |
-| **Handles many features** | 139 features (CIR + hardware) — RF handles this well |
-| **Consistent with classifier** | Same algorithm family makes comparison intuitive |
-
 ---
 
 ## 6. Evaluation Metrics for Regression
@@ -253,7 +243,7 @@ RMSE = √( (1/n) × Σ(predicted - actual)² )
 MAE = (1/n) × Σ|predicted - actual|
 ```
 
-- Average of the absolute differences — **treats all errors equally**
+- Average of the absolute differences — **treats all errors equally** (no squaring)
 - More robust to outliers than RMSE
 - Our result: **Path 1 = 0.980 m**, Path 2 = 1.008 m
 
@@ -272,18 +262,6 @@ R² = 1 - (Sum of squared residuals / Total variance in data)
 - Our result: **Path 1 = 0.707**, Path 2 = 0.743
 
 > **Interpretation**: Our model explains ~70–74% of the variance in range values. The remaining 30% comes from real-world randomness (multipath interference, antenna orientation, building materials).
-
-### Comparison Table
-
-| Metric | Path 1 | Path 2 | Better is... |
-|--------|--------|--------|-------------|
-| RMSE   | 1.275 m | 1.318 m | Lower |
-| MAE    | 0.980 m | 1.008 m | Lower |
-| R²     | 0.707   | 0.743   | Higher |
-
-### Why does Path 2 have *better R²* despite higher RMSE?
-
-Path 2 range values are **spread over a wider range** (2.4 m – 30.7 m) compared to Path 1 (0.01 m – 28 m). R² is a *relative* measure — it rewards explaining a wider variance. Path 2's `PEAK2_GAP` feature gives a strong structural anchor that the model exploits well, boosting R² even though absolute errors are slightly larger.
 
 ---
 
@@ -316,36 +294,6 @@ Path 2 range values are **spread over a wider range** (2.4 m – 30.7 m) compare
 ```
 
 **Result**: Second path found in **100% of samples** — confirming the CIR signal always contains a second detectable multipath reflection indoors.
-
----
-
-### File 2: `range_regressor.py`
-
-**Purpose**: Train and evaluate two range estimators  
-**Input**: `.npy` files from `second_path_features.py`  
-**Output**: Trained models + 3 visualisation plots
-
-**Two models trained:**
-
-```
-Model A (rf_range_path1.pkl):
-  Features: X_train_regression (139 features)
-  Target:   RANGE (actual measured range, metres)
-  Use case: Estimate how far away the first signal path source is
-
-Model B (rf_range_path2.pkl):
-  Features: X_train_regression (same 139 features)
-  Target:   RANGE_PATH2_EST (derived second path range)
-  Use case: Estimate how far away the reflected path source is
-```
-
-**Three output plots:**
-
-| Plot | What it shows |
-|------|--------------|
-| `range_estimation_results.png` | 6-panel: Predicted vs Actual scatter, Residual histograms, Error vs Range, Metrics comparison |
-| `regressor_feature_importance.png` | Top 20 features for both path regressors side by side |
-| `two_path_pair_distribution.png` | Bar chart: how many LOS+NLOS vs NLOS+NLOS pairs in the test set |
 
 ---
 

@@ -107,10 +107,10 @@ import numpy as np
 import pandas as pd
 
 # Load preprocessed data
-X_train = np.load('preprocessed_data/X_train_unscaled.npy')
-X_test = np.load('preprocessed_data/X_test_unscaled.npy')
-y_train = np.load('preprocessed_data/y_train.npy')
-y_test = np.load('preprocessed_data/y_test.npy')
+X_train = np.load('../preprocessed_data/X_train_unscaled.npy')
+X_test = np.load('../preprocessed_data/X_test_unscaled.npy')
+y_train = np.load('../preprocessed_data/y_train.npy')
+y_test = np.load('../preprocessed_data/y_test.npy')
 
 print(f"Training samples: {X_train.shape[0]:,}")
 print(f"Features: {X_train.shape[1]}")

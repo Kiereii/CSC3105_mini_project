@@ -44,6 +44,189 @@ Your project brief mentioned the "3D Process":
 
 ---
 
+## 1.3 The Pipeline: Why This Order Matters
+
+In this project, there are **4 scripts** that must be run in a strict order. Each one depends on the **output** of the previous step. Running them out of order will cause crashes or incorrect results.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 1: clean_local.py                                         │
+│  Input:  Raw CSV files (7 parts, ~6000 rows each)               │
+│  Output: Cleaned CSV files (saved to dataset/Cleaned/)          │
+│     ↓                                                           │
+│  STEP 2: preprocess_data.py                                     │
+│  Input:  Cleaned CSV files                                      │
+│  Output: .npy array files + scaler .pkl files                   │
+│          (saved to preprocessed_data/)                          │
+│     ↓                                                           │
+│  STEP 3a: random_forest_classifier.py                           │
+│  Input:  .npy array files from preprocessed_data/              │
+│  Output: Trained model, confusion matrix, feature importance    │
+│          (saved to models/random_forest/)                       │
+│     ↓                                                           │
+│  STEP 3b: range_regressor.py                                    │
+│  Input:  .npy array files from preprocessed_data/              │
+│  Output: Trained regressor, range estimation plots              │
+│          (saved to models/range_regressor/)                     │
+└─────────────────────────────────────────────────────────────────┘
+
+```
+```
+### What Each Step Is Responsible For
+
+#### STEP 1 — `clean_local.py` : Data Cleaning
+**Role:** Take the raw, unfiltered sensor data and make it trustworthy.
+
+This script is run once on each of the 7 raw CSV files. It is responsible for:
+
+| Task | What It Does | Why It's Needed |
+|------|--------------|-----------------|
+| **Remove duplicates** | Drops rows where every column is identical | Duplicates bias the model by over-representing certain measurements |
+| **Remove nulls** | Drops rows with any missing value | ML algorithms cannot process `NaN` values — they will either crash or produce garbage predictions |
+| **Remove outliers** | Drops rows where `RANGE <= 0` or `STDEV_NOISE` is in the top 1% | Negative/zero distances are physically impossible; extreme noise spikes are sensor malfunctions |
+| **Type enforcement** | Casts the `NLOS` column to integer | Ensures the label is `0` or `1`, not `0.0` or `True/False`, which could confuse the classifier |
+| **Feature engineering** | Calculates `SNR` and `SNR_dB` from existing columns | Adds a physically meaningful derived feature — LOS signals have higher SNR than NLOS |
+
+**What it does NOT do:** It does not split the data, scale it, or train anything. It only ensures the raw data is clean and consistent.
+
+**Output:** 7 cleaned CSV files, e.g. `uwb_cleaned_dataset_part1.csv`, each with ~60–64 fewer rows than the original (~1% removed per file).
+
+---
+
+#### STEP 2 — `preprocess_data.py` : Data Preprocessing
+**Role:** Transform the cleaned data into a format that ML algorithms can directly consume.
+
+This script loads all 7 cleaned CSVs, merges them into one dataset, and prepares it for training. It is responsible for:
+
+| Task | What It Does | Why It's Needed |
+|------|-------------|-----------------|
+| **Feature selection** | Picks 16 core features + 120 CIR samples (730–850) = 136 total | Removes irrelevant columns (e.g. row IDs); focuses on physically meaningful signals |
+| **Target extraction** | Separates the `NLOS` column as label `y` | The model needs to know what it is learning to predict — this is the "answer" |
+| **Train/test split** | 80% training (33,254 samples), 20% testing (8,314 samples), stratified | Ensures the model is evaluated on data it has never seen, giving a fair measure of real-world performance |
+| **Scaling** | Applies `StandardScaler` (mean=0, std=1) and `MinMaxScaler` (0–1) | Some algorithms (SVM, Logistic Regression) require features on the same scale to work correctly |
+| **Saving arrays** | Saves `X_train`, `X_test`, `y_train`, `y_test` as `.npy` files | Allows any downstream script to load the exact same split without reprocessing the CSVs every time |
+| **Saving scalers** | Saves fitted scalers as `.pkl` files | The same scaler used on training data MUST be applied to test/new data — saving it ensures consistency |
+
+**What it does NOT do:** It does not train any model. It only prepares and saves the data.
+
+**Why 80/20 split?**
+```
+Training set (80%) → The model learns patterns from this data
+Test set (20%)     → The model is evaluated on this (never seen before)
+
+If you tested on the same data used for training:
+  → Model just memorizes the answers → fake 95%+ accuracy
+  → Fails completely on new real-world measurements
+  → This is called OVERFITTING
+```
+
+**Why stratified split?**
+- The dataset is roughly 50/50 LOS vs NLOS (20,997 LOS vs 20,571 NLOS)
+- Stratified split ensures both training AND test sets maintain this 50/50 balance
+- Without it, you could accidentally get a test set that is 80% LOS and 20% NLOS
+- This would make the model look more accurate than it really is (it would just always guess LOS)
+
+**Output:** 10 files in `preprocessed_data/`:
+```
+X_train_unscaled.npy   ← For Random Forest (tree-based, doesn't need scaling)
+X_test_unscaled.npy
+X_train_standard.npy   ← For SVM / Logistic Regression (need zero-centred data)
+X_test_standard.npy
+X_train_minmax.npy     ← For Neural Networks (need data in [0,1] range)
+X_test_minmax.npy
+y_train.npy            ← Labels for training
+y_test.npy             ← Labels for evaluation
+scaler_standard.pkl    ← Saved StandardScaler object
+scaler_minmax.pkl      ← Saved MinMaxScaler object
+```
+
+---
+
+#### STEP 3a — `random_forest_classifier.py` : Supervised Learning (Classification)
+**Role:** Train a machine learning model to classify each UWB measurement as LOS or NLOS.
+
+This is the **supervised learning** step. The model is given labeled examples (136 features + known LOS/NLOS answer) and learns the patterns that distinguish them.
+
+| Task | What It Does | Why It's Needed |
+|------|-------------|-----------------|
+| **Load preprocessed data** | Reads the `.npy` files produced in Step 2 | Gets the consistent, reproducible data split |
+| **Train Random Forest** | Calls `rf_model.fit(X_train, y_train)` | Builds 100 decision trees, each learning different patterns from random subsets of training data |
+| **Make predictions** | Calls `rf_model.predict(X_test)` | Applies the learned model to the 8,314 unseen test samples |
+| **Evaluate performance** | Computes accuracy, precision, recall, F1, ROC-AUC | Quantifies how well the model generalises to new data |
+| **Confusion matrix** | Plots a heatmap of TP, TN, FP, FN | Reveals exactly which types of errors the model makes, and which are more common |
+| **Feature importance** | Ranks all 136 features by MDI score | Tells us which measurements most distinguish LOS from NLOS — RXPACC is #1 at 15.6% |
+
+**Why use Random Forest instead of a single Decision Tree?**
+```
+Single Decision Tree:
+  → Sees ALL 33,254 training samples
+  → Builds very specific, detailed rules
+  → Training accuracy: ~95% (looks great!)
+  → Test accuracy: ~75% (fails on new data — overfitting!)
+
+Random Forest (100 trees):
+  → Each tree sees a different random 63% of training samples
+  → Each split considers only √136 ≈ 12 random features
+  → Trees make different mistakes that cancel each other out
+  → Test accuracy: 88.69% (genuinely reliable)
+```
+
+**Output:** Saved to `models/random_forest/`:
+```
+random_forest_model.pkl          ← The trained model (can be loaded and reused)
+confusion_matrix_and_roc.png     ← Visual evaluation (confusion matrix + ROC curve)
+feature_importance.png           ← Top 20 features bar chart
+feature_importance_ranking.csv   ← All 136 features ranked with scores
+model_results.txt                ← All metrics in text form
+```
+
+---
+
+#### STEP 3b — `range_regressor.py` : Supervised Learning (Regression)
+**Role:** Predict the actual measured distance (range in metres) for both signal paths.
+
+While Step 3a answers *"Is this LOS or NLOS?"*, Step 3b answers *"How far away is the device?"*. This is a **regression** problem — the output is a continuous number, not a category.
+
+| Task | What It Does | Why It's Needed |
+|------|-------------|-----------------|
+| **Train Path 1 regressor** | Predicts the range of the first dominant signal path | The first path distance is the primary input for localization calculations |
+| **Train Path 2 regressor** | Predicts the range of the second dominant signal path | The second path provides additional geometric information for more accurate positioning |
+| **Evaluate with RMSE/MAE** | Measures average prediction error in metres | Tells us how accurate the distance estimates are in real physical units |
+| **Plot predicted vs actual** | Scatter plot of predictions against ground truth | Visually confirms that the model follows real distances, not just guessing an average |
+
+**Classification vs Regression — what's the difference?**
+
+| | Classification (Step 3a) | Regression (Step 3b) |
+|---|---|---|
+| **Question** | "Which category is this?" | "What number is this?" |
+| **Output** | A label: `0` (LOS) or `1` (NLOS) | A value: e.g. `2.47` metres |
+| **Algorithm** | `RandomForestClassifier` | `RandomForestRegressor` |
+| **Error metric** | Accuracy, F1, ROC-AUC | RMSE, MAE |
+| **Loss function** | Gini Impurity | Mean Squared Error |
+
+**Output:** Saved to `models/range_regressor/`:
+```
+rf_range_path1.pkl           ← Trained regressor for path 1 distance
+rf_range_path2.pkl           ← Trained regressor for path 2 distance
+range_estimation_results.png ← Predicted vs actual distance scatter plots
+regression_results.txt       ← RMSE, MAE metrics for both paths
+```
+
+---
+
+### Full Pipeline Summary
+
+| Step | Script | Role | Input | Output |
+|------|--------|------|-------|--------|
+| 1 | `clean_local.py` | Data Cleaning | 7 raw CSVs | 7 cleaned CSVs |
+| 2 | `preprocess_data.py` | Data Preprocessing | 7 cleaned CSVs | `.npy` arrays + `.pkl` scalers |
+| 3a | `random_forest_classifier.py` | LOS/NLOS Classification | `.npy` arrays | Trained classifier + evaluation metrics |
+| 3b | `range_regressor.py` | Distance Estimation | `.npy` arrays | Trained regressor + distance plots |
+
+**The golden rule:** Each step **produces files** that the next step **reads**. You cannot skip a step because the files it produces simply won't exist yet.
+
+---
+
 ## 2. Understanding Your UWB Data
 
 ### 2.1 What is UWB?

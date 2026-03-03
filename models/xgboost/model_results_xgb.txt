@@ -1,0 +1,42 @@
+XGBOOST CLASSIFICATION RESULTS
+============================================================
+
+Dataset: UWB LOS/NLOS
+Features: 136 (core + CIR 730-849)
+Training samples: 33,254
+Test samples    : 8,314
+
+MODEL CONFIGURATION:
+  - subsample: 0.8
+  - reg_lambda: 2
+  - reg_alpha: 0
+  - n_estimators: 300
+  - max_depth: 7
+  - learning_rate: 0.1
+  - colsample_bytree: 0.7
+  - scale_pos_weight: 1.0207
+  - random_state    : 42
+
+PERFORMANCE METRICS:
+  - Accuracy  : 0.9211 (92.11%)
+  - Precision : 0.9351
+  - Recall    : 0.9033
+  - F1-Score  : 0.9189
+  - ROC-AUC   : 0.9763
+
+FEATURE IMPORTANCE SUMMARY:
+  - Core features importance : 0.3717 (37.2%)
+  - CIR  features importance : 0.6283  (62.8%)
+
+CONFUSION MATRIX:
+  True LOS  predicted as LOS  : 3,942
+  True LOS  predicted as NLOS : 258
+  True NLOS predicted as LOS  : 398
+  True NLOS predicted as NLOS : 3,716
+
+TOP 5 FEATURES:
+  1. RXPACC: 0.1718
+  2. FP_AMP3: 0.0457
+  3. CIR_PWR: 0.0383
+  4. SNR_dB: 0.0316
+  5. RANGE: 0.0306

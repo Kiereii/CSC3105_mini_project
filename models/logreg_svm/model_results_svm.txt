@@ -1,0 +1,34 @@
+SVM (LINEARSVC + CALIBRATION) CLASSIFICATION RESULTS
+============================================================
+
+Dataset: UWB LOS/NLOS
+Features: 136 (16 core + 120 CIR)
+Training samples: 33,254
+Test samples: 8,314
+
+MODEL CONFIGURATION:
+  - C: 1.0
+  - max_iter: 2000
+  - class_weight: balanced
+  - calibration_cv: 3
+  - random_state: 42
+
+PERFORMANCE METRICS:
+  - Accuracy  : 0.8596 (85.96%)
+  - Precision : 0.8968
+  - Recall    : 0.8094
+  - F1-Score  : 0.8509
+  - ROC-AUC   : 0.9224
+
+CONFUSION MATRIX:
+  True LOS  predicted as LOS  : 3,817
+  True LOS  predicted as NLOS : 383
+  True NLOS predicted as LOS  : 784
+  True NLOS predicted as NLOS : 3,330
+
+TOP 5 FEATURES:
+  1. RXPACC: 0.6418
+  2. MAX_NOISE: 0.2142
+  3. STDEV_NOISE: 0.1407
+  4. RANGE: 0.1264
+  5. FP_IDX: 0.1130

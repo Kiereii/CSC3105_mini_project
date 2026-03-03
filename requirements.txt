@@ -6,3 +6,4 @@ seaborn
 scipy
 joblib
 jupyter
+xgboost

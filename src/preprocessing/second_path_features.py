@@ -4,15 +4,19 @@ UWB LOS/NLOS - Second Path Feature Extraction
 The brief requires classifying and estimating range for TWO dominant paths.
 
 Path logic (from brief):
-  - If Path 1 = LOS  → Path 2 is always NLOS
-  - If Path 1 = NLOS → Path 2 is always NLOS
-  So Path 2 label is ALWAYS 1 (NLOS). The real value is in RANGE ESTIMATION.
+  - If Path 1 = LOS  → Path 2 is always NLOS  → Pair label = 0 (LOS+NLOS)
+  - If Path 1 = NLOS → Path 2 is always NLOS  → Pair label = 1 (NLOS+NLOS)
+  So Path 2 label is ALWAYS 1 (NLOS). The real value is in RANGE ESTIMATION
+  and PAIR-LEVEL CLASSIFICATION.
 
 This script:
   1. Finds the second dominant CIR peak after the first path region
   2. Engineers second-path features (index, amplitude, gap from first path)
   3. Derives Path 2 estimated range from the peak index offset
   4. Saves all features + targets ready for the range regressor
+  5. Saves pair-labelled dataset for the pair_classifier
+     PAIR_LABEL = 0 → LOS+NLOS  (Path 1 was LOS, a trustworthy path exists)
+     PAIR_LABEL = 1 → NLOS+NLOS (Both paths obstructed, no trustworthy path)
 """
 
 import pandas as pd
@@ -20,7 +24,6 @@ import numpy as np
 from pathlib import Path
 from scipy.signal import find_peaks
 from sklearn.model_selection import train_test_split
-import pickle
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -211,7 +214,70 @@ print(f"✓ y_range_p1_train/test.npy")
 print(f"✓ y_range_p2_train/test.npy")
 print(f"✓ regression_feature_names.txt")
 print()
+
+# ── Build pair-level feature matrix & labels ───────────────────────────────────
+# Pair features: 15 core + 4 second-path features + 120 CIR samples = 139 total
+# PAIR_LABEL mirrors NLOS:
+#   0 = LOS+NLOS  (Path 1 is LOS → a trustworthy path exists)
+#   1 = NLOS+NLOS (Path 1 is NLOS → both paths obstructed)
+print("Building pair-level classification dataset...")
+
+pair_core_features = [
+    "RANGE", "FP_IDX", "FP_AMP1", "FP_AMP2", "FP_AMP3",
+    "STDEV_NOISE", "CIR_PWR", "MAX_NOISE", "RXPACC",
+    "CH", "FRAME_LEN", "PREAM_LEN", "BITRATE", "PRFR",
+    "SNR", "SNR_dB",
+    # Second-path features — these make this a TRUE pair classifier
+    "PEAK2_IDX", "PEAK2_AMP", "PEAK2_GAP", "PEAK2_FOUND",
+]
+
+pair_feature_columns = pair_core_features + cir_features   # 20 + 120 = 140
+
+X_pair        = df[pair_feature_columns].values
+y_pair        = df["NLOS"].values   # 0=LOS+NLOS, 1=NLOS+NLOS
+
+# Same seed & ratio as all other splits for consistency
+(X_pair_train, X_pair_test,
+ y_pair_train, y_pair_test) = train_test_split(
+    X_pair, y_pair,
+    test_size=TEST_SIZE,
+    random_state=RANDOM_SEED,
+    stratify=y_pair
+)
+
+np.save(OUTPUT_DIR / "X_train_pair.npy",  X_pair_train)
+np.save(OUTPUT_DIR / "X_test_pair.npy",   X_pair_test)
+np.save(OUTPUT_DIR / "y_train_pair.npy",  y_pair_train)
+np.save(OUTPUT_DIR / "y_test_pair.npy",   y_pair_test)
+
+# Save pair feature names
+with open(OUTPUT_DIR / "pair_feature_names.txt", "w") as f:
+    f.write("PAIR CLASSIFIER FEATURE NAMES\n")
+    f.write("=" * 50 + "\n\n")
+    f.write("Target: PAIR_LABEL\n")
+    f.write("  0 = LOS+NLOS  (Path 1 is LOS — trustworthy path exists)\n")
+    f.write("  1 = NLOS+NLOS (Both paths obstructed — no trustworthy path)\n\n")
+    f.write(f"Core + Second-Path Features ({len(pair_core_features)}):\n")
+    for i, feat in enumerate(pair_core_features, 1):
+        f.write(f"  {i:2d}. {feat}\n")
+    f.write(f"\nCIR Features ({len(cir_features)}):\n")
+    f.write(f"  Range: CIR{CIR_START} to CIR{CIR_END - 1}\n")
+    f.write(f"\nTotal features: {len(pair_feature_columns)}\n")
+    f.write(f"\nClass balance:\n")
+    f.write(f"  LOS+NLOS  (0): {(y_pair == 0).sum():,} ({(y_pair == 0).mean()*100:.1f}%)\n")
+    f.write(f"  NLOS+NLOS (1): {(y_pair == 1).sum():,} ({(y_pair == 1).mean()*100:.1f}%)\n")
+
+los_nlos_count  = (y_pair == 0).sum()
+nlos_nlos_count = (y_pair == 1).sum()
+print(f"✓ Pair labels — LOS+NLOS: {los_nlos_count:,}  |  NLOS+NLOS: {nlos_nlos_count:,}")
+print(f"✓ X_train_pair.npy        {X_pair_train.shape}")
+print(f"✓ X_test_pair.npy         {X_pair_test.shape}")
+print(f"✓ y_train_pair.npy / y_test_pair.npy")
+print(f"✓ pair_feature_names.txt")
+print()
 print("=" * 80)
-print("SECOND PATH EXTRACTION COMPLETE — ready for range_regressor.py")
+print("SECOND PATH EXTRACTION COMPLETE")
+print("  → range_regressor.py  uses X_train_regression.npy")
+print("  → pair_classifier.py  uses X_train_pair.npy")
 print("=" * 80)
 

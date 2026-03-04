@@ -1,0 +1,30 @@
+PAIR-LEVEL CLASSIFIER RESULTS
+============================================================
+
+Task: LOS+NLOS vs NLOS+NLOS pair classification
+Features: 20 core+second-path + 120 CIR = 140 total
+Training samples: 33,254
+Test samples    : 8,314
+
+PAIR_LABEL definition:
+  0 = LOS+NLOS  (Path 1 LOS exists — trustworthy range available)
+  1 = NLOS+NLOS (Both paths obstructed — apply bias correction)
+
+Random Forest:
+  Accuracy  : 0.8875
+  Precision : 0.9238
+  Recall    : 0.8422
+  F1-Score  : 0.8811
+  ROC-AUC   : 0.9533
+
+XGBoost:
+  Accuracy  : 0.9212
+  Precision : 0.9358
+  Recall    : 0.9028
+  F1-Score  : 0.9190
+  ROC-AUC   : 0.9758
+
+Feature importance breakdown (RF):
+  2nd-path features (PEAK2_*) : 1.1%
+  CIR waveform features       : 54.0%
+  Core physical features      : 44.9%

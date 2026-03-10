@@ -57,6 +57,7 @@ y_pred  = {
     "Logistic Regression" : np.load("models/logreg_svm/y_pred_lr.npy"),
     "SVM (LinearSVC)"     : np.load("models/logreg_svm/y_pred_svm.npy"),
     "XGBoost"             : np.load("models/xgboost/y_pred_xgb.npy"),
+    "1D CNN"              : np.load("models/cnn/y_pred_cnn.npy"),
 }
 
 y_proba = {
@@ -64,6 +65,7 @@ y_proba = {
     "Logistic Regression" : np.load("models/logreg_svm/y_proba_lr.npy"),
     "SVM (LinearSVC)"     : np.load("models/logreg_svm/y_proba_svm.npy"),
     "XGBoost"             : np.load("models/xgboost/y_pred_proba_xgb.npy"),
+    "1D CNN"              : np.load("models/cnn/y_pred_proba_cnn.npy"),
 }
 
 # Model display colours (consistent across all plots)
@@ -72,6 +74,7 @@ COLORS = {
     "Logistic Regression" : "#e74c3c",
     "SVM (LinearSVC)"     : "#9b59b6",
     "XGBoost"             : "#f39c12",
+    "1D CNN"              : "#1a5276",
 }
 
 print("✓ All model outputs loaded")
@@ -123,8 +126,8 @@ plot_melted = plot_df.melt(id_vars="Model", var_name="Metric", value_name="Score
 fig, ax = plt.subplots(figsize=(14, 6))
 model_names  = list(y_pred.keys())
 x            = np.arange(len(metrics_to_plot))
-bar_width    = 0.18
-offsets      = np.linspace(-(bar_width * 1.5), bar_width * 1.5, 4)
+bar_width    = 0.14
+offsets      = np.linspace(-(bar_width * 2), bar_width * 2, 5)
 
 for i, model_name in enumerate(model_names):
     scores = [metrics_df.loc[model_name, m] for m in metrics_to_plot]
@@ -154,7 +157,7 @@ plt.close()
 # ==============================================================================
 print("Step 4: Plotting all confusion matrices...")
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+fig, axes = plt.subplots(2, 3, figsize=(20, 11))
 axes_flat = axes.flatten()
 
 for idx, model_name in enumerate(model_names):
@@ -180,6 +183,9 @@ for idx, model_name in enumerate(model_names):
     tn, fp, fn, tp = cm.ravel()
     ax.text(0.5, 1.75, f"⚠ Dangerous: {fn:,}", ha="center", va="center",
             fontsize=8, color="darkred", style="italic")
+
+# Hide the unused 6th subplot (5 models in a 2x3 grid)
+axes_flat[5].set_visible(False)
 
 fig.suptitle("Confusion Matrices – All Models\n"
              "(⚠ Dangerous = NLOS misclassified as LOS)",

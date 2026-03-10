@@ -194,6 +194,46 @@ While Step 3a answers *"Is this LOS or NLOS?"*, Step 3b answers *"How far away i
 | **Evaluate with RMSE/MAE** | Measures average prediction error in metres | Tells us how accurate the distance estimates are in real physical units |
 | **Plot predicted vs actual** | Scatter plot of predictions against ground truth | Visually confirms that the model follows real distances, not just guessing an average |
 
+**Why does it become a regression problem after Step 3a?**
+
+Step 3a and Step 3b are **not sequential in logic** — they are two independent problems solved against the same preprocessed data. Both scripts read directly from the same `.npy` files produced in Step 2. The ordering is just presentation order, not a data dependency.
+
+They ask completely different questions about the same UWB measurement:
+
+| | Step 3a | Step 3b |
+|---|---|---|
+| **Question** | Is this signal obstructed? | How far away is the device? |
+| **Target column** | `NLOS` — either `0` or `1` | `RANGE` — e.g. `2.47`, `3.81` metres |
+| **Output type** | A discrete **category** | A continuous **number** |
+
+Because the target (`RANGE`) is a real number with no upper bound and infinite possible values, you cannot use a classifier. A classifier can only output a fixed set of labels. This is why a `RandomForestRegressor` is used — its leaf nodes output the **mean** of the training samples that fell there, not a majority vote.
+
+**Same algorithm, different leaf behaviour:**
+```
+Classifier leaf:   "70 LOS, 30 NLOS  →  predict class 0 (LOS)"
+Regressor leaf:    "40 samples, mean range = 2.83 m  →  predict 2.83"
+```
+
+The split criterion also changes: instead of **Gini Impurity** (minimise class mixing), the regressor uses **Mean Squared Error** (minimise the spread of range values within each leaf).
+
+**Why you need both in a real positioning system:**
+
+They answer complementary questions:
+1. **Classifier (3a)** → *"Should I trust this distance measurement?"* — NLOS signals travel via reflections, making the measured distance longer than the true distance.
+2. **Regressor (3b)** → *"What distance does the sensor report?"* — regardless of LOS/NLOS, you still need the actual number for trilateration (computing a position from multiple distances).
+
+In a deployed system you would chain them: use the classifier's output to decide whether to correct or discard the regressor's distance estimate before feeding it into the positioning algorithm.
+
+**Why two paths (Path 1 and Path 2)?**
+
+A UWB receiver can detect multiple signal arrivals — a direct path and reflected paths. Two separate regressors are trained:
+- **Path 1**: the dominant (earliest/strongest) arrival — primary distance estimate
+- **Path 2**: the second arrival — used for cross-validation or more accurate multipath-aware positioning
+
+Training two regressors on the same features but different target columns (`y_range_p1` vs `y_range_p2`) lets you evaluate their accuracy independently and keeps each model simple.
+
+---
+
 **Classification vs Regression — what's the difference?**
 
 | | Classification (Step 3a) | Regression (Step 3b) |

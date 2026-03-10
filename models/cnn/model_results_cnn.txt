@@ -1,0 +1,35 @@
+1D CNN CLASSIFICATION RESULTS
+============================================================
+
+Dataset   : UWB LOS/NLOS
+Features  : 136 (16 core + 120 CIR 730-849)
+Scaling   : Standard (zero-mean, unit-variance)
+Training samples : 33,254
+Test samples     : 8,314
+
+MODEL ARCHITECTURE:
+  CIR Branch  : Conv1D(32,5) → MaxPool → Conv1D(64,3) → MaxPool
+                → Conv1D(64,3) → GlobalAvgPool → Dense(64) → Dropout(0.3)
+  Core Branch : Dense(32) → BN → Dense(32)
+  Merged      : Concatenate → Dense(64) → Dropout(0.4) → Sigmoid
+  Total params: 30,913
+
+TRAINING:
+  Epochs (total ran) : 73
+  Best epoch         : 63
+  Training time      : 44.92 seconds
+  EarlyStopping      : patience=10
+  ReduceLROnPlateau  : patience=5, factor=0.5
+
+PERFORMANCE METRICS:
+  Accuracy  : 0.9182  (91.82%)
+  Precision : 0.9409
+  Recall    : 0.8906
+  F1-Score  : 0.9151
+  ROC-AUC   : 0.9772
+
+CONFUSION MATRIX:
+  True LOS  predicted as LOS  : 3,970
+  True LOS  predicted as NLOS : 230
+  True NLOS predicted as LOS  : 450  ← Dangerous
+  True NLOS predicted as NLOS : 3,664

@@ -19,16 +19,18 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from pathlib import Path
 import joblib
 import time
+import os
 import warnings
 
 warnings.filterwarnings("ignore")
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-DATA_DIR   = Path("./preprocessed_data")
-OUTPUT_DIR = Path("./models/range_regressor")
+RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
+OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "range_regressor"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-RANDOM_SEED = 42
+RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 
 print("=" * 80)
 print("RANDOM FOREST RANGE ESTIMATOR — PATH 1 & PATH 2")
@@ -38,12 +40,12 @@ print()
 # ── Load data ──────────────────────────────────────────────────────────────────
 print("Step 1: Loading regression data...")
 
-X_train    = np.load(DATA_DIR / "X_train_regression.npy")
-X_test     = np.load(DATA_DIR / "X_test_regression.npy")
+X_train = np.load(DATA_DIR / "X_train_regression.npy")
+X_test = np.load(DATA_DIR / "X_test_regression.npy")
 y_p1_train = np.load(DATA_DIR / "y_range_p1_train.npy")
-y_p1_test  = np.load(DATA_DIR / "y_range_p1_test.npy")
+y_p1_test = np.load(DATA_DIR / "y_range_p1_test.npy")
 y_p2_train = np.load(DATA_DIR / "y_range_p2_train.npy")
-y_p2_test  = np.load(DATA_DIR / "y_range_p2_test.npy")
+y_p2_test = np.load(DATA_DIR / "y_range_p2_test.npy")
 
 with open(DATA_DIR / "regression_feature_names.txt") as f:
     lines = f.readlines()
@@ -55,16 +57,18 @@ print(f"  Path 1 range     : {y_p1_train.min():.2f} – {y_p1_train.max():.2f} m
 print(f"  Path 2 range     : {y_p2_train.min():.2f} – {y_p2_train.max():.2f} m")
 print()
 
+
 # ── Helper: evaluate and report ────────────────────────────────────────────────
 def evaluate(y_true, y_pred, label):
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    mae  = mean_absolute_error(y_true, y_pred)
-    r2   = r2_score(y_true, y_pred)
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
     print(f"  {label}")
     print(f"    RMSE : {rmse:.4f} m")
     print(f"    MAE  : {mae:.4f} m")
     print(f"    R²   : {r2:.4f}")
     return rmse, mae, r2
+
 
 # =============================================================================
 # STEP 2: PATH 1 RANGE ESTIMATOR
@@ -119,19 +123,22 @@ print("Step 4: Generating visualizations...")
 
 plt.style.use("seaborn-v0_8-darkgrid")
 fig, axes = plt.subplots(2, 3, figsize=(18, 11))
-fig.suptitle("Range Estimation Results — Path 1 & Path 2", fontsize=16, fontweight="bold")
+fig.suptitle(
+    "Range Estimation Results — Path 1 & Path 2", fontsize=16, fontweight="bold"
+)
 
 # ── Row 0: Path 1 ──────────────────────────────────────────────────────────────
 # 0,0 — Predicted vs Actual scatter
 ax = axes[0, 0]
 ax.scatter(y_p1_test, y_p1_pred, alpha=0.3, s=8, color="#3498db", label="Predictions")
-lims = [min(y_p1_test.min(), y_p1_pred.min()),
-        max(y_p1_test.max(), y_p1_pred.max())]
+lims = [min(y_p1_test.min(), y_p1_pred.min()), max(y_p1_test.max(), y_p1_pred.max())]
 ax.plot(lims, lims, "r--", linewidth=2, label="Perfect fit")
 ax.set_xlabel("Actual Range (m)")
 ax.set_ylabel("Predicted Range (m)")
-ax.set_title(f"Path 1 — Predicted vs Actual\nR²={p1_r2:.4f}  RMSE={p1_rmse:.4f}m",
-             fontweight="bold")
+ax.set_title(
+    f"Path 1 — Predicted vs Actual\nR²={p1_r2:.4f}  RMSE={p1_rmse:.4f}m",
+    fontweight="bold",
+)
 ax.legend(fontsize=9)
 
 # 0,1 — Residuals
@@ -156,13 +163,14 @@ ax.legend(fontsize=9)
 # 1,0 — Predicted vs Actual scatter
 ax = axes[1, 0]
 ax.scatter(y_p2_test, y_p2_pred, alpha=0.3, s=8, color="#e74c3c", label="Predictions")
-lims = [min(y_p2_test.min(), y_p2_pred.min()),
-        max(y_p2_test.max(), y_p2_pred.max())]
+lims = [min(y_p2_test.min(), y_p2_pred.min()), max(y_p2_test.max(), y_p2_pred.max())]
 ax.plot(lims, lims, "b--", linewidth=2, label="Perfect fit")
 ax.set_xlabel("Actual Range (m)")
 ax.set_ylabel("Predicted Range (m)")
-ax.set_title(f"Path 2 — Predicted vs Actual\nR²={p2_r2:.4f}  RMSE={p2_rmse:.4f}m",
-             fontweight="bold")
+ax.set_title(
+    f"Path 2 — Predicted vs Actual\nR²={p2_r2:.4f}  RMSE={p2_rmse:.4f}m",
+    fontweight="bold",
+)
 ax.legend(fontsize=9)
 
 # 1,1 — Residuals
@@ -181,18 +189,34 @@ p1_vals = [p1_rmse, p1_mae, p1_r2]
 p2_vals = [p2_rmse, p2_mae, p2_r2]
 x = np.arange(len(metrics))
 width = 0.35
-bars1 = ax.bar(x - width/2, p1_vals, width, label="Path 1", color="#3498db", alpha=0.85)
-bars2 = ax.bar(x + width/2, p2_vals, width, label="Path 2", color="#e74c3c", alpha=0.85)
+bars1 = ax.bar(
+    x - width / 2, p1_vals, width, label="Path 1", color="#3498db", alpha=0.85
+)
+bars2 = ax.bar(
+    x + width / 2, p2_vals, width, label="Path 2", color="#e74c3c", alpha=0.85
+)
 ax.set_xticks(x)
 ax.set_xticklabels(metrics)
 ax.set_title("Path 1 vs Path 2 — Metrics Comparison", fontweight="bold")
 ax.legend()
 for bar in bars1:
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
-            f"{bar.get_height():.3f}", ha="center", va="bottom", fontsize=8)
+    ax.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height(),
+        f"{bar.get_height():.3f}",
+        ha="center",
+        va="bottom",
+        fontsize=8,
+    )
 for bar in bars2:
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
-            f"{bar.get_height():.3f}", ha="center", va="bottom", fontsize=8)
+    ax.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height(),
+        f"{bar.get_height():.3f}",
+        ha="center",
+        va="bottom",
+        fontsize=8,
+    )
 
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "range_estimation_results.png", dpi=300, bbox_inches="tight")
@@ -204,21 +228,35 @@ print("  Plotting feature importance...")
 
 # Read feature names
 core_feats = [
-    "FP_IDX", "FP_AMP1", "FP_AMP2", "FP_AMP3",
-    "STDEV_NOISE", "CIR_PWR", "MAX_NOISE", "RXPACC",
-    "CH", "FRAME_LEN", "PREAM_LEN", "BITRATE", "PRFR",
-    "SNR", "SNR_dB",
-    "PEAK2_IDX", "PEAK2_AMP", "PEAK2_GAP", "PEAK2_FOUND",
+    "FP_IDX",
+    "FP_AMP1",
+    "FP_AMP2",
+    "FP_AMP3",
+    "STDEV_NOISE",
+    "CIR_PWR",
+    "MAX_NOISE",
+    "RXPACC",
+    "CH",
+    "FRAME_LEN",
+    "PREAM_LEN",
+    "BITRATE",
+    "PRFR",
+    "SNR",
+    "SNR_dB",
+    "PEAK2_IDX",
+    "PEAK2_AMP",
+    "PEAK2_GAP",
+    "PEAK2_FOUND",
 ]
-cir_feats   = [f"CIR{i}" for i in range(730, 850)]
-feat_names  = core_feats + cir_feats
+cir_feats = [f"CIR{i}" for i in range(730, 850)]
+feat_names = core_feats + cir_feats
 
 importances_p1 = rf_p1.feature_importances_
 importances_p2 = rf_p2.feature_importances_
 
-top_n   = 20
-idx_p1  = np.argsort(importances_p1)[::-1][:top_n]
-idx_p2  = np.argsort(importances_p2)[::-1][:top_n]
+top_n = 20
+idx_p1 = np.argsort(importances_p1)[::-1][:top_n]
+idx_p2 = np.argsort(importances_p2)[::-1][:top_n]
 
 fig, axes = plt.subplots(1, 2, figsize=(18, 7))
 
@@ -237,16 +275,22 @@ for ax, importances, indices, title, color in [
 
 plt.suptitle("Feature Importance — Range Regressors", fontsize=15, fontweight="bold")
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "regressor_feature_importance.png", dpi=300, bbox_inches="tight")
+plt.savefig(
+    OUTPUT_DIR / "regressor_feature_importance.png", dpi=300, bbox_inches="tight"
+)
 print(f"  ✓ Saved: regressor_feature_importance.png")
 plt.close()
 
 # ── Two-path pair classification summary ──────────────────────────────────────
 # Per brief: determine if pair is LOS+NLOS or NLOS+NLOS
-y_p1_class = np.load(DATA_DIR / "y_test.npy")   # reuse classifier test labels
+pair_labels_path = DATA_DIR / "y_test_pair.npy"
+if pair_labels_path.exists():
+    y_p1_class = np.load(pair_labels_path)
+else:
+    y_p1_class = np.load(DATA_DIR / "y_test.npy")
 
-los_nlos_count  = np.sum(y_p1_class == 0)   # LOS first path → pair = LOS+NLOS
-nlos_nlos_count = np.sum(y_p1_class == 1)   # NLOS first path → pair = NLOS+NLOS
+los_nlos_count = np.sum(y_p1_class == 0)  # LOS first path → pair = LOS+NLOS
+nlos_nlos_count = np.sum(y_p1_class == 1)  # NLOS first path → pair = NLOS+NLOS
 total = len(y_p1_class)
 
 fig, ax = plt.subplots(figsize=(7, 5))
@@ -255,15 +299,24 @@ bars = ax.bar(
     [los_nlos_count, nlos_nlos_count],
     color=["#2ecc71", "#e74c3c"],
     alpha=0.85,
-    edgecolor="white"
+    edgecolor="white",
 )
 for bar, cnt in zip(bars, [los_nlos_count, nlos_nlos_count]):
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(),
-            f"{cnt:,}\n({cnt/total*100:.1f}%)",
-            ha="center", va="bottom", fontweight="bold", fontsize=11)
+    ax.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height(),
+        f"{cnt:,}\n({cnt / total * 100:.1f}%)",
+        ha="center",
+        va="bottom",
+        fontweight="bold",
+        fontsize=11,
+    )
 ax.set_ylabel("Number of Samples")
-ax.set_title("Two-Path Pair Classification\n(Path 2 is always NLOS per brief)",
-             fontweight="bold", fontsize=13)
+ax.set_title(
+    "Two-Path Pair Classification\n(Path 2 is always NLOS per brief)",
+    fontweight="bold",
+    fontsize=13,
+)
 ax.grid(axis="y", alpha=0.3)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "two_path_pair_distribution.png", dpi=300, bbox_inches="tight")
@@ -299,8 +352,12 @@ with open(OUTPUT_DIR / "regression_results.txt", "w") as f:
     f.write(f"  R²   : {p2_r2:.4f}\n\n")
 
     f.write("TWO-PATH PAIR CLASSIFICATION:\n")
-    f.write(f"  LOS + NLOS  pairs : {los_nlos_count:,} ({los_nlos_count/total*100:.1f}%)\n")
-    f.write(f"  NLOS + NLOS pairs : {nlos_nlos_count:,} ({nlos_nlos_count/total*100:.1f}%)\n\n")
+    f.write(
+        f"  LOS + NLOS  pairs : {los_nlos_count:,} ({los_nlos_count / total * 100:.1f}%)\n"
+    )
+    f.write(
+        f"  NLOS + NLOS pairs : {nlos_nlos_count:,} ({nlos_nlos_count / total * 100:.1f}%)\n\n"
+    )
 
     f.write("NOTE: Path 2 is always classified as NLOS per project brief.\n")
     f.write("      Range for Path 2 is estimated from second CIR peak offset.\n")
@@ -330,4 +387,3 @@ print("   • regression_results.txt")
 print()
 print("▶  NEXT: Run eda_focused.py to visualise second-path peak detections")
 print("=" * 80)
-

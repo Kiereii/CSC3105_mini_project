@@ -1,10 +1,18 @@
 # Ignore trained model pickles and large binary artifacts
 models/**/*.pkl
 models/*.pkl
+models/**/*.keras
+models/*.keras
 
 # Ignore preprocessed binary data and caches
 preprocessed_data/
+runs/
 *.npy
+
+# Virtual environment
+.venv/
+venv/
+env/
 
 # Bytecode and editors
 *.pyc
@@ -12,7 +20,9 @@ __pycache__/
 .vscode/
 .idea/
 
+# Generated plots/images
+*.png
+
 # Temp files
 *~
 .DS_Store
-

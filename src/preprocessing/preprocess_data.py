@@ -10,24 +10,27 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pickle
+import os
+import json
 import warnings
 
 warnings.filterwarnings("ignore")
 
 # Configuration
 DATA_DIR = Path("./Dataset/UWB-LOS-NLOS-Data-Set/dataset/Cleaned")
-OUTPUT_DIR = Path("./preprocessed_data")
-OUTPUT_DIR.mkdir(exist_ok=True)
+RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
+TEST_SIZE = float(os.getenv("TEST_SIZE", "0.2"))
 
-RANDOM_SEED = 42
-TEST_SIZE = 0.2  # 80/20 split
+OUTPUT_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Focused CIR region (from EDA)
+# Focused CIR region
 CIR_START = 730
 CIR_END = 850
 
 print("=" * 80)
-print("UWB DATASET PREPROCESSING - OPTION B")
+print("UWB DATASET PREPROCESSING")
 print("=" * 80)
 print(
     f"Features: 15 core + {CIR_END - CIR_START} CIR samples = {15 + (CIR_END - CIR_START)} total"
@@ -97,13 +100,17 @@ print()
 # =============================================================================
 print("Step 3: Splitting data...")
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
+indices = np.arange(len(df))
+
+train_idx, test_idx = train_test_split(
+    indices,
     test_size=TEST_SIZE,
     random_state=RANDOM_SEED,
-    stratify=y,  # Maintain LOS/NLOS balance
+    stratify=y,
 )
+
+X_train, X_test = X[train_idx], X[test_idx]
+y_train, y_test = y[train_idx], y[test_idx]
 
 print(f"Training set: {X_train.shape[0]:,} samples")
 print(f"Test set: {X_test.shape[0]:,} samples")
@@ -130,11 +137,15 @@ np.save(OUTPUT_DIR / "X_train_unscaled.npy", X_train)
 np.save(OUTPUT_DIR / "X_test_unscaled.npy", X_test)
 np.save(OUTPUT_DIR / "y_train.npy", y_train)
 np.save(OUTPUT_DIR / "y_test.npy", y_test)
+np.save(OUTPUT_DIR / "train_idx.npy", train_idx)
+np.save(OUTPUT_DIR / "test_idx.npy", test_idx)
 
 print(f"✓ Saved: X_train_unscaled.npy ({X_train.shape})")
 print(f"✓ Saved: X_test_unscaled.npy ({X_test.shape})")
 print(f"✓ Saved: y_train.npy ({y_train.shape})")
 print(f"✓ Saved: y_test.npy ({y_test.shape})")
+print(f"✓ Saved: train_idx.npy ({train_idx.shape})")
+print(f"✓ Saved: test_idx.npy ({test_idx.shape})")
 print()
 
 # =============================================================================
@@ -210,17 +221,35 @@ with open(OUTPUT_DIR / "preprocessing_info.txt", "w") as f:
     f.write(f"  - Core features: {len(core_features)}\n")
     f.write(f"  - CIR features: {len(cir_features)} (samples {CIR_START}-{CIR_END})\n")
     f.write(f"\nRandom seed: {RANDOM_SEED}\n")
+    f.write(f"Run name: {RUN_NAME}\n")
     f.write(f"Stratified split: Yes\n\n")
     f.write("Generated files:\n")
     f.write("  1. X_train_unscaled.npy / X_test_unscaled.npy\n")
     f.write("  2. X_train_standard.npy / X_test_standard.npy\n")
     f.write("  3. X_train_minmax.npy / X_test_minmax.npy\n")
     f.write("  4. y_train.npy / y_test.npy\n")
-    f.write("  5. scaler_standard.pkl\n")
-    f.write("  6. scaler_minmax.pkl\n")
+    f.write("  5. train_idx.npy / test_idx.npy\n")
+    f.write("  6. scaler_standard.pkl\n")
+    f.write("  7. scaler_minmax.pkl\n")
+
+with open(OUTPUT_DIR / "split_config.json", "w") as f:
+    json.dump(
+        {
+            "run_name": RUN_NAME,
+            "random_seed": RANDOM_SEED,
+            "test_size": TEST_SIZE,
+            "train_size": 1 - TEST_SIZE,
+            "n_total": int(len(df)),
+            "n_train": int(len(train_idx)),
+            "n_test": int(len(test_idx)),
+        },
+        f,
+        indent=2,
+    )
 
 print(f"✓ Saved: feature_names.txt")
 print(f"✓ Saved: preprocessing_info.txt")
+print(f"✓ Saved: split_config.json")
 print()
 
 # =============================================================================
@@ -254,7 +283,6 @@ print("=" * 80)
 print()
 print("📁 Generated files in:", OUTPUT_DIR.absolute())
 print()
-print("FOR YOUR TEAM:")
 print("  • Random Forest / Decision Trees: Use X_train_unscaled.npy")
 print("  • SVM / Logistic Regression: Use X_train_standard.npy")
 print("  • Neural Networks: Use X_train_standard.npy or X_train_minmax.npy")

@@ -33,6 +33,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from pathlib import Path
 import joblib
 import time
+import os
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -40,12 +41,13 @@ warnings.filterwarnings("ignore")
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-DATA_DIR   = Path("./preprocessed_data")
-OUTPUT_DIR = Path("./models/xgboost")
+RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
+OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "xgboost"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-RANDOM_SEED  = 42   # Same seed as RF and LR/SVM for fair comparison
-RUN_TUNING   = True # Set to False to skip hyperparameter search and use defaults
+RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
+RUN_TUNING = os.getenv("RUN_TUNING", "1") == "1"
 
 print("=" * 80)
 print("XGBOOST CLASSIFIER - UWB LOS/NLOS PREDICTION")
@@ -64,15 +66,15 @@ print("(Using UNSCALED data - XGBoost is tree-based, no scaling needed)")
 print()
 
 X_train = np.load(DATA_DIR / "X_train_unscaled.npy")
-X_test  = np.load(DATA_DIR / "X_test_unscaled.npy")
+X_test = np.load(DATA_DIR / "X_test_unscaled.npy")
 y_train = np.load(DATA_DIR / "y_train.npy")
-y_test  = np.load(DATA_DIR / "y_test.npy")
+y_test = np.load(DATA_DIR / "y_test.npy")
 
 # Load feature names - same parsing logic as random_forest_classifier.py
 with open(DATA_DIR / "feature_names.txt", "r") as f:
     lines = f.readlines()
 
-feature_names    = []
+feature_names = []
 reading_features = False
 for line in lines:
     if "Core Features" in line:
@@ -101,11 +103,13 @@ print("-" * 80)
 
 # Compute scale_pos_weight to handle any class imbalance
 # (ratio of NLOS to LOS - if perfectly balanced this equals 1.0)
-n_los  = np.sum(y_train == 0)
+n_los = np.sum(y_train == 0)
 n_nlos = np.sum(y_train == 1)
 scale_pos_weight = n_los / n_nlos
-print(f"  scale_pos_weight = {scale_pos_weight:.4f}  "
-      f"({'balanced' if abs(scale_pos_weight - 1.0) < 0.01 else 'adjusted for imbalance'})")
+print(
+    f"  scale_pos_weight = {scale_pos_weight:.4f}  "
+    f"({'balanced' if abs(scale_pos_weight - 1.0) < 0.01 else 'adjusted for imbalance'})"
+)
 print()
 
 if RUN_TUNING:
@@ -114,33 +118,33 @@ if RUN_TUNING:
     print()
 
     param_grid = {
-        "n_estimators"    : [100, 200, 300],      # Number of boosting rounds
-        "max_depth"       : [3, 5, 7],             # Depth of each tree
-        "learning_rate"   : [0.05, 0.1, 0.2],     # Step size shrinkage
-        "subsample"       : [0.7, 0.8, 1.0],       # Row sampling per tree
-        "colsample_bytree": [0.7, 0.8, 1.0],       # Feature sampling per tree
-        "reg_alpha"       : [0, 0.1, 0.5],         # L1 regularisation
-        "reg_lambda"      : [1, 1.5, 2],           # L2 regularisation
+        "n_estimators": [100, 200, 300],  # Number of boosting rounds
+        "max_depth": [3, 5, 7],  # Depth of each tree
+        "learning_rate": [0.05, 0.1, 0.2],  # Step size shrinkage
+        "subsample": [0.7, 0.8, 1.0],  # Row sampling per tree
+        "colsample_bytree": [0.7, 0.8, 1.0],  # Feature sampling per tree
+        "reg_alpha": [0, 0.1, 0.5],  # L1 regularisation
+        "reg_lambda": [1, 1.5, 2],  # L2 regularisation
     }
 
     base_xgb = XGBClassifier(
-        objective        = "binary:logistic",
-        eval_metric      = "logloss",
-        scale_pos_weight = scale_pos_weight,
-        random_state     = RANDOM_SEED,
-        n_jobs           = -1,
-        verbosity        = 0,
+        objective="binary:logistic",
+        eval_metric="logloss",
+        scale_pos_weight=scale_pos_weight,
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        verbosity=0,
     )
 
     search = RandomizedSearchCV(
-        estimator          = base_xgb,
-        param_distributions= param_grid,
-        n_iter             = 10,      # 10 random combinations (increase if time allows)
-        cv                 = 3,       # 3-fold cross validation
-        scoring            = "f1",    # Optimise for F1 (balance precision & recall)
-        random_state       = RANDOM_SEED,
-        n_jobs             = -1,
-        verbose            = 1,
+        estimator=base_xgb,
+        param_distributions=param_grid,
+        n_iter=10,  # 10 random combinations (increase if time allows)
+        cv=3,  # 3-fold cross validation
+        scoring="f1",  # Optimise for F1 (balance precision & recall)
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        verbose=1,
     )
 
     t0 = time.time()
@@ -158,13 +162,13 @@ if RUN_TUNING:
 else:
     # Sensible defaults if you want to skip tuning and run fast
     best_params = {
-        "n_estimators"    : 200,
-        "max_depth"       : 5,
-        "learning_rate"   : 0.1,
-        "subsample"       : 0.8,
+        "n_estimators": 200,
+        "max_depth": 5,
+        "learning_rate": 0.1,
+        "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "reg_alpha"       : 0.1,
-        "reg_lambda"      : 1.0,
+        "reg_alpha": 0.1,
+        "reg_lambda": 1.0,
     }
     print("(Skipping tuning - using default parameters)")
     print()
@@ -177,12 +181,12 @@ print("-" * 80)
 
 xgb_model = XGBClassifier(
     **best_params,
-    objective        = "binary:logistic",
-    eval_metric      = "logloss",
-    scale_pos_weight = scale_pos_weight,
-    random_state     = RANDOM_SEED,
-    n_jobs           = -1,
-    verbosity        = 1,
+    objective="binary:logistic",
+    eval_metric="logloss",
+    scale_pos_weight=scale_pos_weight,
+    random_state=RANDOM_SEED,
+    n_jobs=-1,
+    verbosity=1,
 )
 
 t0 = time.time()
@@ -197,7 +201,7 @@ print()
 # ==============================================================================
 print("Step 4: Making predictions...")
 
-y_pred       = xgb_model.predict(X_test)
+y_pred = xgb_model.predict(X_test)
 y_pred_proba = xgb_model.predict_proba(X_test)[:, 1]  # Probability of NLOS (class 1)
 
 print("✓ Predictions completed")
@@ -209,11 +213,11 @@ print()
 print("Step 5: Evaluating model performance...")
 print("=" * 80)
 
-accuracy  = accuracy_score(y_test, y_pred)
+accuracy = accuracy_score(y_test, y_pred)
 precision = precision_score(y_test, y_pred)
-recall    = recall_score(y_test, y_pred)
-f1        = f1_score(y_test, y_pred)
-auc       = roc_auc_score(y_test, y_pred_proba)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+auc = roc_auc_score(y_test, y_pred_proba)
 
 print("\n PERFORMANCE METRICS:")
 print("-" * 40)
@@ -238,21 +242,34 @@ cm = confusion_matrix(y_test, y_pred)
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
 # Confusion Matrix
-sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax1,
-            xticklabels=["LOS", "NLOS"], yticklabels=["LOS", "NLOS"])
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    ax=ax1,
+    xticklabels=["LOS", "NLOS"],
+    yticklabels=["LOS", "NLOS"],
+)
 ax1.set_title("Confusion Matrix – XGBoost", fontsize=14, fontweight="bold")
 ax1.set_xlabel("Predicted")
 ax1.set_ylabel("Actual")
 total = cm.sum()
 for i in range(2):
     for j in range(2):
-        ax1.text(j + 0.5, i + 0.7, f"({cm[i, j] / total * 100:.1f}%)",
-                 ha="center", va="center", fontsize=10, color="red")
+        ax1.text(
+            j + 0.5,
+            i + 0.7,
+            f"({cm[i, j] / total * 100:.1f}%)",
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="red",
+        )
 
 # ROC Curve
 fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
-ax2.plot(fpr, tpr, color="#f39c12", linewidth=2,
-         label=f"ROC Curve (AUC = {auc:.4f})")
+ax2.plot(fpr, tpr, color="#f39c12", linewidth=2, label=f"ROC Curve (AUC = {auc:.4f})")
 ax2.plot([0, 1], [0, 1], color="gray", linestyle="--", label="Random Classifier")
 ax2.set_xlabel("False Positive Rate", fontsize=12)
 ax2.set_ylabel("True Positive Rate", fontsize=12)
@@ -261,8 +278,9 @@ ax2.legend(fontsize=11)
 ax2.grid(alpha=0.3)
 
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "confusion_matrix_and_roc_xgb.png", dpi=300,
-            bbox_inches="tight")
+plt.savefig(
+    OUTPUT_DIR / "confusion_matrix_and_roc_xgb.png", dpi=300, bbox_inches="tight"
+)
 print("✓ Saved: confusion_matrix_and_roc_xgb.png")
 plt.close()
 
@@ -276,13 +294,15 @@ print("=" * 80)
 # gain   = average gain of the feature when it is used in trees
 # weight = number of times the feature appears in trees
 # cover  = average coverage of the feature across all trees
-importances = xgb_model.feature_importances_   # 'gain' by default
-indices     = np.argsort(importances)[::-1]
+importances = xgb_model.feature_importances_  # 'gain' by default
+indices = np.argsort(importances)[::-1]
 
-feature_importance_df = pd.DataFrame({
-    "Feature"   : [feature_names[i] for i in indices],
-    "Importance": importances[indices],
-})
+feature_importance_df = pd.DataFrame(
+    {
+        "Feature": [feature_names[i] for i in indices],
+        "Importance": importances[indices],
+    }
+)
 
 print("\n TOP 20 MOST IMPORTANT FEATURES (XGBoost):")
 print("-" * 50)
@@ -292,10 +312,10 @@ print()
 
 # Top 20 feature bar chart
 fig, ax = plt.subplots(figsize=(12, 8))
-top_n          = 20
-top_indices    = indices[:top_n]
-top_features   = [feature_names[i] for i in top_indices]
-top_importances= importances[top_indices]
+top_n = 20
+top_indices = indices[:top_n]
+top_features = [feature_names[i] for i in top_indices]
+top_importances = importances[top_indices]
 
 y_pos = np.arange(len(top_features))
 ax.barh(y_pos, top_importances, align="center", color="#f39c12")
@@ -303,8 +323,9 @@ ax.set_yticks(y_pos)
 ax.set_yticklabels(top_features)
 ax.invert_yaxis()
 ax.set_xlabel("Feature Importance (Gain)", fontsize=12)
-ax.set_title(f"Top {top_n} Most Important Features (XGBoost)",
-             fontsize=14, fontweight="bold")
+ax.set_title(
+    f"Top {top_n} Most Important Features (XGBoost)", fontsize=14, fontweight="bold"
+)
 ax.grid(axis="x", alpha=0.3)
 
 plt.tight_layout()
@@ -318,7 +339,7 @@ plt.close()
 print("Step 8: Analyzing feature categories...")
 
 core_importance = []
-cir_importance  = []
+cir_importance = []
 
 for i, feat_name in enumerate(feature_names):
     if feat_name.startswith("CIR"):
@@ -327,35 +348,45 @@ for i, feat_name in enumerate(feature_names):
         core_importance.append(importances[i])
 
 core_total = np.sum(core_importance)
-cir_total  = np.sum(cir_importance)
+cir_total = np.sum(cir_importance)
 
 print(f"\n IMPORTANCE BY CATEGORY:")
 print("-" * 40)
-print(f"Core Features ({len(core_importance)}): {core_total:.4f} ({core_total * 100:.1f}%)")
-print(f"CIR  Features ({len(cir_importance)}): {cir_total:.4f}  ({cir_total * 100:.1f}%)")
+print(
+    f"Core Features ({len(core_importance)}): {core_total:.4f} ({core_total * 100:.1f}%)"
+)
+print(
+    f"CIR  Features ({len(cir_importance)}): {cir_total:.4f}  ({cir_total * 100:.1f}%)"
+)
 print()
 
 fig, ax = plt.subplots(figsize=(8, 6))
-categories = [f"Core Features\n({len(core_importance)} features)",
-              f"CIR Features\n({len(cir_importance)} features)"]
+categories = [
+    f"Core Features\n({len(core_importance)} features)",
+    f"CIR Features\n({len(cir_importance)} features)",
+]
 values = [core_total, cir_total]
 colors = ["#e74c3c", "#f39c12"]
 
 bars = ax.bar(categories, values, color=colors, alpha=0.8)
 ax.set_ylabel("Total Importance", fontsize=12)
-ax.set_title("Feature Importance by Category – XGBoost",
-             fontsize=14, fontweight="bold")
+ax.set_title("Feature Importance by Category – XGBoost", fontsize=14, fontweight="bold")
 ax.set_ylim(0, 1)
 
 for bar, val in zip(bars, values):
     height = bar.get_height()
-    ax.text(bar.get_x() + bar.get_width() / 2.0, height,
-            f"{val:.3f}\n({val * 100:.1f}%)",
-            ha="center", va="bottom", fontsize=11, fontweight="bold")
+    ax.text(
+        bar.get_x() + bar.get_width() / 2.0,
+        height,
+        f"{val:.3f}\n({val * 100:.1f}%)",
+        ha="center",
+        va="bottom",
+        fontsize=11,
+        fontweight="bold",
+    )
 
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "importance_by_category_xgb.png", dpi=300,
-            bbox_inches="tight")
+plt.savefig(OUTPUT_DIR / "importance_by_category_xgb.png", dpi=300, bbox_inches="tight")
 print("✓ Saved: importance_by_category_xgb.png")
 plt.close()
 
@@ -364,38 +395,54 @@ plt.close()
 # ==============================================================================
 print("Step 9: Generating combined ROC plot (all models)...")
 
-rf_proba_path  = Path("./models/random_forest/y_pred_proba.npy")
-lr_proba_path  = Path("./models/logreg_svm/y_proba_lr.npy")
-svm_proba_path = Path("./models/logreg_svm/y_proba_svm.npy")
+rf_proba_path = (
+    Path("./runs") / RUN_NAME / "models" / "random_forest" / "y_pred_proba.npy"
+)
+lr_proba_path = Path("./runs") / RUN_NAME / "models" / "logreg_svm" / "y_proba_lr.npy"
+svm_proba_path = Path("./runs") / RUN_NAME / "models" / "logreg_svm" / "y_proba_svm.npy"
 
 fig, ax = plt.subplots(figsize=(9, 7))
 ax.plot([0, 1], [0, 1], color="gray", linestyle="--", label="Random Classifier")
 
 # XGBoost (always available here)
-ax.plot(fpr, tpr, color="#f39c12", linewidth=2,
-        label=f"XGBoost (AUC = {auc:.4f})")
+ax.plot(fpr, tpr, color="#f39c12", linewidth=2, label=f"XGBoost (AUC = {auc:.4f})")
 
 # Load other models if they exist
 if rf_proba_path.exists():
-    y_proba_rf    = np.load(rf_proba_path)
+    y_proba_rf = np.load(rf_proba_path)
     fpr_rf, tpr_rf, _ = roc_curve(y_test, y_proba_rf)
-    auc_rf        = roc_auc_score(y_test, y_proba_rf)
-    ax.plot(fpr_rf, tpr_rf, color="#2ecc71", linewidth=2,
-            label=f"Random Forest (AUC = {auc_rf:.4f})")
+    auc_rf = roc_auc_score(y_test, y_proba_rf)
+    ax.plot(
+        fpr_rf,
+        tpr_rf,
+        color="#2ecc71",
+        linewidth=2,
+        label=f"Random Forest (AUC = {auc_rf:.4f})",
+    )
 
 if lr_proba_path.exists():
-    y_proba_lr    = np.load(lr_proba_path)
+    y_proba_lr = np.load(lr_proba_path)
     fpr_lr, tpr_lr, _ = roc_curve(y_test, y_proba_lr)
-    auc_lr        = roc_auc_score(y_test, y_proba_lr)
-    ax.plot(fpr_lr, tpr_lr, color="#e74c3c", linewidth=2,
-            label=f"Logistic Regression (AUC = {auc_lr:.4f})")
+    auc_lr = roc_auc_score(y_test, y_proba_lr)
+    ax.plot(
+        fpr_lr,
+        tpr_lr,
+        color="#e74c3c",
+        linewidth=2,
+        label=f"Logistic Regression (AUC = {auc_lr:.4f})",
+    )
 
 if svm_proba_path.exists():
-    y_proba_svm    = np.load(svm_proba_path)
+    y_proba_svm = np.load(svm_proba_path)
     fpr_svm, tpr_svm, _ = roc_curve(y_test, y_proba_svm)
-    auc_svm        = roc_auc_score(y_test, y_proba_svm)
-    ax.plot(fpr_svm, tpr_svm, color="#9b59b6", linewidth=2,
-            label=f"SVM – LinearSVC (AUC = {auc_svm:.4f})")
+    auc_svm = roc_auc_score(y_test, y_proba_svm)
+    ax.plot(
+        fpr_svm,
+        tpr_svm,
+        color="#9b59b6",
+        linewidth=2,
+        label=f"SVM – LinearSVC (AUC = {auc_svm:.4f})",
+    )
 
 ax.set_xlabel("False Positive Rate", fontsize=12)
 ax.set_ylabel("True Positive Rate", fontsize=12)
@@ -441,8 +488,12 @@ with open(OUTPUT_DIR / "model_results_xgb.txt", "w") as f:
     f.write(f"  - F1-Score  : {f1:.4f}\n")
     f.write(f"  - ROC-AUC   : {auc:.4f}\n\n")
     f.write("FEATURE IMPORTANCE SUMMARY:\n")
-    f.write(f"  - Core features importance : {core_total:.4f} ({core_total * 100:.1f}%)\n")
-    f.write(f"  - CIR  features importance : {cir_total:.4f}  ({cir_total * 100:.1f}%)\n\n")
+    f.write(
+        f"  - Core features importance : {core_total:.4f} ({core_total * 100:.1f}%)\n"
+    )
+    f.write(
+        f"  - CIR  features importance : {cir_total:.4f}  ({cir_total * 100:.1f}%)\n\n"
+    )
     f.write("CONFUSION MATRIX:\n")
     f.write(f"  True LOS  predicted as LOS  : {cm[0, 0]:,}\n")
     f.write(f"  True LOS  predicted as NLOS : {cm[0, 1]:,}\n")
@@ -450,8 +501,10 @@ with open(OUTPUT_DIR / "model_results_xgb.txt", "w") as f:
     f.write(f"  True NLOS predicted as NLOS : {cm[1, 1]:,}\n\n")
     f.write("TOP 5 FEATURES:\n")
     for rank in range(5):
-        f.write(f"  {rank + 1}. {feature_names[indices[rank]]}: "
-                f"{importances[indices[rank]]:.4f}\n")
+        f.write(
+            f"  {rank + 1}. {feature_names[indices[rank]]}: "
+            f"{importances[indices[rank]]:.4f}\n"
+        )
 
 print("✓ Saved: model_results_xgb.txt")
 
@@ -469,8 +522,10 @@ print(f"   F1-Score  : {f1:.4f}")
 print(f"   ROC-AUC   : {auc:.4f}")
 print()
 print(" KEY INSIGHTS:")
-print(f"   Top feature : {feature_names[indices[0]]} "
-      f"(importance = {importances[indices[0]]:.4f})")
+print(
+    f"   Top feature : {feature_names[indices[0]]} "
+    f"(importance = {importances[indices[0]]:.4f})"
+)
 print(f"   Core features contribute : {core_total * 100:.1f}% of total importance")
 print(f"   CIR  features contribute : {cir_total * 100:.1f}% of total importance")
 print()

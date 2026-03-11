@@ -24,16 +24,18 @@ from sklearn.metrics import (
 )
 from pathlib import Path
 import time
+import os
 import warnings
 
 warnings.filterwarnings("ignore")
 
 # Configuration
-DATA_DIR = Path("./preprocessed_data")
-OUTPUT_DIR = Path("./models/random_forest")
+RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
+OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "random_forest"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-RANDOM_SEED = 42
+RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 
 print("=" * 80)
 print("RANDOM FOREST CLASSIFIER - UWB LOS/NLOS PREDICTION")
@@ -44,7 +46,6 @@ print()
 # STEP 1: LOAD PREPROCESSED DATA
 # =============================================================================
 print("Step 1: Loading preprocessed data...")
-print("(Using UNSCALED data - Random Forest doesn't need scaling)")
 print()
 
 X_train = np.load(DATA_DIR / "X_train_unscaled.npy")

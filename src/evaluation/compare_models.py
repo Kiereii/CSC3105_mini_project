@@ -30,13 +30,19 @@ from sklearn.metrics import (
     f1_score,
 )
 from pathlib import Path
+import os
 import warnings
 
 warnings.filterwarnings("ignore")
 
 plt.style.use("seaborn-v0_8-darkgrid")
 
-OUTPUT_DIR = Path("./models/comparison")
+RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RUN_ROOT = Path("./runs") / RUN_NAME
+PREP_DIR = RUN_ROOT / "preprocessed_data"
+MODELS_DIR = RUN_ROOT / "models"
+
+OUTPUT_DIR = MODELS_DIR / "comparison"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 print("=" * 80)
@@ -49,32 +55,36 @@ print()
 # ==============================================================================
 print("Step 1: Loading all model outputs...")
 
-y_test = np.load("preprocessed_data/y_test.npy")
+y_test = np.load(PREP_DIR / "y_test.npy")
 
 # Load predictions and probabilities from each model
-y_pred  = {
-    "Random Forest"       : np.load("models/random_forest/y_pred.npy"),
-    "Logistic Regression" : np.load("models/logreg_svm/y_pred_lr.npy"),
-    "SVM (LinearSVC)"     : np.load("models/logreg_svm/y_pred_svm.npy"),
-    "XGBoost"             : np.load("models/xgboost/y_pred_xgb.npy"),
-    "1D CNN"              : np.load("models/cnn/y_pred_cnn.npy"),
+y_pred = {
+    "Random Forest": np.load(MODELS_DIR / "random_forest" / "y_pred.npy"),
+    "Logistic Regression": np.load(MODELS_DIR / "logreg_svm" / "y_pred_lr.npy"),
+    "SVM (LinearSVC)": np.load(MODELS_DIR / "logreg_svm" / "y_pred_svm.npy"),
+    "XGBoost": np.load(MODELS_DIR / "xgboost" / "y_pred_xgb.npy"),
 }
 
 y_proba = {
-    "Random Forest"       : np.load("models/random_forest/y_pred_proba.npy"),
-    "Logistic Regression" : np.load("models/logreg_svm/y_proba_lr.npy"),
-    "SVM (LinearSVC)"     : np.load("models/logreg_svm/y_proba_svm.npy"),
-    "XGBoost"             : np.load("models/xgboost/y_pred_proba_xgb.npy"),
-    "1D CNN"              : np.load("models/cnn/y_pred_proba_cnn.npy"),
+    "Random Forest": np.load(MODELS_DIR / "random_forest" / "y_pred_proba.npy"),
+    "Logistic Regression": np.load(MODELS_DIR / "logreg_svm" / "y_proba_lr.npy"),
+    "SVM (LinearSVC)": np.load(MODELS_DIR / "logreg_svm" / "y_proba_svm.npy"),
+    "XGBoost": np.load(MODELS_DIR / "xgboost" / "y_pred_proba_xgb.npy"),
 }
+
+cnn_pred_path = MODELS_DIR / "cnn" / "y_pred_cnn.npy"
+cnn_proba_path = MODELS_DIR / "cnn" / "y_pred_proba_cnn.npy"
+if cnn_pred_path.exists() and cnn_proba_path.exists():
+    y_pred["1D CNN"] = np.load(cnn_pred_path)
+    y_proba["1D CNN"] = np.load(cnn_proba_path)
 
 # Model display colours (consistent across all plots)
 COLORS = {
-    "Random Forest"       : "#2ecc71",
-    "Logistic Regression" : "#e74c3c",
-    "SVM (LinearSVC)"     : "#9b59b6",
-    "XGBoost"             : "#f39c12",
-    "1D CNN"              : "#1a5276",
+    "Random Forest": "#2ecc71",
+    "Logistic Regression": "#e74c3c",
+    "SVM (LinearSVC)": "#9b59b6",
+    "XGBoost": "#f39c12",
+    "1D CNN": "#1a5276",
 }
 
 print("✓ All model outputs loaded")
@@ -87,29 +97,34 @@ print("Step 2: Computing unified metrics table...")
 
 rows = []
 for model_name in y_pred:
-    yt   = y_test
-    yp   = y_pred[model_name]
+    yt = y_test
+    yp = y_pred[model_name]
     yprb = y_proba[model_name]
-    cm   = confusion_matrix(yt, yp)
+    cm = confusion_matrix(yt, yp)
     tn, fp, fn, tp = cm.ravel()
 
-    rows.append({
-        "Model"          : model_name,
-        "Accuracy"       : accuracy_score(yt, yp),
-        "Precision"      : precision_score(yt, yp),
-        "Recall"         : recall_score(yt, yp),
-        "F1-Score"       : f1_score(yt, yp),
-        "ROC-AUC"        : roc_auc_score(yt, yprb),
-        "NLOS Recall"    : tp / (tp + fn),   # True NLOS detected correctly
-        "NLOS FalseNeg"  : fn,               # NLOS wrongly predicted as LOS (dangerous)
-        "LOS FalsePos"   : fp,               # LOS wrongly predicted as NLOS
-    })
+    rows.append(
+        {
+            "Model": model_name,
+            "Accuracy": accuracy_score(yt, yp),
+            "Precision": precision_score(yt, yp),
+            "Recall": recall_score(yt, yp),
+            "F1-Score": f1_score(yt, yp),
+            "ROC-AUC": roc_auc_score(yt, yprb),
+            "NLOS Recall": tp / (tp + fn),  # True NLOS detected correctly
+            "NLOS FalseNeg": fn,  # NLOS wrongly predicted as LOS (dangerous)
+            "LOS FalsePos": fp,  # LOS wrongly predicted as NLOS
+        }
+    )
 
 metrics_df = pd.DataFrame(rows).set_index("Model")
 metrics_df.to_csv(OUTPUT_DIR / "metrics_comparison.csv")
 
-print(metrics_df[["Accuracy", "Precision", "Recall", "F1-Score", "ROC-AUC",
-                   "NLOS Recall"]].to_string())
+print(
+    metrics_df[
+        ["Accuracy", "Precision", "Recall", "F1-Score", "ROC-AUC", "NLOS Recall"]
+    ].to_string()
+)
 print()
 print("✓ Saved: metrics_comparison.csv")
 print()
@@ -124,26 +139,43 @@ plot_df = metrics_df[metrics_to_plot].reset_index()
 plot_melted = plot_df.melt(id_vars="Model", var_name="Metric", value_name="Score")
 
 fig, ax = plt.subplots(figsize=(14, 6))
-model_names  = list(y_pred.keys())
-x            = np.arange(len(metrics_to_plot))
-bar_width    = 0.14
-offsets      = np.linspace(-(bar_width * 2), bar_width * 2, 5)
+model_names = list(y_pred.keys())
+x = np.arange(len(metrics_to_plot))
+bar_width = 0.14
+offsets = np.linspace(
+    -(bar_width * (len(model_names) - 1) / 2),
+    (bar_width * (len(model_names) - 1) / 2),
+    len(model_names),
+)
 
 for i, model_name in enumerate(model_names):
     scores = [metrics_df.loc[model_name, m] for m in metrics_to_plot]
-    bars   = ax.bar(x + offsets[i], scores, bar_width,
-                    label=model_name, color=COLORS[model_name], alpha=0.85)
+    bars = ax.bar(
+        x + offsets[i],
+        scores,
+        bar_width,
+        label=model_name,
+        color=COLORS[model_name],
+        alpha=0.85,
+    )
     for bar, score in zip(bars, scores):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.002,
-                f"{score:.3f}", ha="center", va="bottom", fontsize=7,
-                fontweight="bold")
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.002,
+            f"{score:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=7,
+            fontweight="bold",
+        )
 
 ax.set_xticks(x)
 ax.set_xticklabels(metrics_to_plot, fontsize=11)
 ax.set_ylabel("Score", fontsize=12)
 ax.set_ylim(0, 1.08)
-ax.set_title("Classification Metrics – All Models Compared",
-             fontsize=14, fontweight="bold")
+ax.set_title(
+    "Classification Metrics – All Models Compared", fontsize=14, fontweight="bold"
+)
 ax.legend(fontsize=10)
 ax.grid(axis="y", alpha=0.3)
 
@@ -161,14 +193,22 @@ fig, axes = plt.subplots(2, 3, figsize=(20, 11))
 axes_flat = axes.flatten()
 
 for idx, model_name in enumerate(model_names):
-    cm  = confusion_matrix(y_test, y_pred[model_name])
-    ax  = axes_flat[idx]
+    cm = confusion_matrix(y_test, y_pred[model_name])
+    ax = axes_flat[idx]
 
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax,
-                xticklabels=["LOS", "NLOS"], yticklabels=["LOS", "NLOS"],
-                linewidths=0.5)
-    ax.set_title(f"{model_name}", fontsize=13, fontweight="bold",
-                 color=COLORS[model_name])
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        ax=ax,
+        xticklabels=["LOS", "NLOS"],
+        yticklabels=["LOS", "NLOS"],
+        linewidths=0.5,
+    )
+    ax.set_title(
+        f"{model_name}", fontsize=13, fontweight="bold", color=COLORS[model_name]
+    )
     ax.set_xlabel("Predicted", fontsize=11)
     ax.set_ylabel("Actual", fontsize=11)
 
@@ -176,20 +216,38 @@ for idx, model_name in enumerate(model_names):
     total = cm.sum()
     for i in range(2):
         for j in range(2):
-            ax.text(j + 0.5, i + 0.75, f"({cm[i,j]/total*100:.1f}%)",
-                    ha="center", va="center", fontsize=9, color="red")
+            ax.text(
+                j + 0.5,
+                i + 0.75,
+                f"({cm[i, j] / total * 100:.1f}%)",
+                ha="center",
+                va="center",
+                fontsize=9,
+                color="red",
+            )
 
     # Annotate dangerous error: NLOS predicted as LOS (bottom-left cell)
     tn, fp, fn, tp = cm.ravel()
-    ax.text(0.5, 1.75, f"⚠ Dangerous: {fn:,}", ha="center", va="center",
-            fontsize=8, color="darkred", style="italic")
+    ax.text(
+        0.5,
+        1.75,
+        f"⚠ Dangerous: {fn:,}",
+        ha="center",
+        va="center",
+        fontsize=8,
+        color="darkred",
+        style="italic",
+    )
 
 # Hide the unused 6th subplot (5 models in a 2x3 grid)
-axes_flat[5].set_visible(False)
+for idx in range(len(model_names), len(axes_flat)):
+    axes_flat[idx].set_visible(False)
 
-fig.suptitle("Confusion Matrices – All Models\n"
-             "(⚠ Dangerous = NLOS misclassified as LOS)",
-             fontsize=15, fontweight="bold")
+fig.suptitle(
+    "Confusion Matrices – All Models\n(⚠ Dangerous = NLOS misclassified as LOS)",
+    fontsize=15,
+    fontweight="bold",
+)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "confusion_matrices_all.png", dpi=300, bbox_inches="tight")
 print("✓ Saved: confusion_matrices_all.png")
@@ -201,14 +259,25 @@ plt.close()
 print("Step 5: Plotting combined ROC curve...")
 
 fig, ax = plt.subplots(figsize=(8, 7))
-ax.plot([0, 1], [0, 1], color="gray", linestyle="--",
-        linewidth=1.5, label="Random Classifier (AUC = 0.500)")
+ax.plot(
+    [0, 1],
+    [0, 1],
+    color="gray",
+    linestyle="--",
+    linewidth=1.5,
+    label="Random Classifier (AUC = 0.500)",
+)
 
 for model_name in model_names:
     fpr, tpr, _ = roc_curve(y_test, y_proba[model_name])
-    auc          = roc_auc_score(y_test, y_proba[model_name])
-    ax.plot(fpr, tpr, color=COLORS[model_name], linewidth=2.2,
-            label=f"{model_name} (AUC = {auc:.4f})")
+    auc = roc_auc_score(y_test, y_proba[model_name])
+    ax.plot(
+        fpr,
+        tpr,
+        color=COLORS[model_name],
+        linewidth=2.2,
+        label=f"{model_name} (AUC = {auc:.4f})",
+    )
 
 ax.set_xlabel("False Positive Rate", fontsize=12)
 ax.set_ylabel("True Positive Rate", fontsize=12)
@@ -225,13 +294,13 @@ plt.close()
 # ==============================================================================
 print("Step 6: Plotting feature importance comparison (tree models)...")
 
-rf_imp  = pd.read_csv("models/random_forest/feature_importance_ranking.csv")
-xgb_imp = pd.read_csv("models/xgboost/feature_importance_xgb.csv")
+rf_imp = pd.read_csv(MODELS_DIR / "random_forest" / "feature_importance_ranking.csv")
+xgb_imp = pd.read_csv(MODELS_DIR / "xgboost" / "feature_importance_xgb.csv")
 
 # Align on same top 15 features by RF ranking
 top15_features = rf_imp["Feature"].head(15).tolist()
 
-rf_scores  = rf_imp.set_index("Feature").loc[top15_features, "Importance"].values
+rf_scores = rf_imp.set_index("Feature").loc[top15_features, "Importance"].values
 xgb_scores = []
 for feat in top15_features:
     row = xgb_imp[xgb_imp["Feature"] == feat]
@@ -241,25 +310,41 @@ xgb_scores = np.array(xgb_scores)
 # Normalise XGBoost to sum to 1 for fair visual comparison
 xgb_scores = xgb_scores / xgb_scores.sum() if xgb_scores.sum() > 0 else xgb_scores
 
-x        = np.arange(len(top15_features))
-bar_w    = 0.38
+x = np.arange(len(top15_features))
+bar_w = 0.38
 
 fig, ax = plt.subplots(figsize=(14, 7))
-ax.bar(x - bar_w/2, rf_scores,  bar_w, label="Random Forest",
-       color=COLORS["Random Forest"], alpha=0.85)
-ax.bar(x + bar_w/2, xgb_scores, bar_w, label="XGBoost",
-       color=COLORS["XGBoost"], alpha=0.85)
+ax.bar(
+    x - bar_w / 2,
+    rf_scores,
+    bar_w,
+    label="Random Forest",
+    color=COLORS["Random Forest"],
+    alpha=0.85,
+)
+ax.bar(
+    x + bar_w / 2,
+    xgb_scores,
+    bar_w,
+    label="XGBoost",
+    color=COLORS["XGBoost"],
+    alpha=0.85,
+)
 
 ax.set_xticks(x)
 ax.set_xticklabels(top15_features, rotation=35, ha="right", fontsize=9)
 ax.set_ylabel("Feature Importance (normalised)", fontsize=12)
-ax.set_title("Feature Importance: Random Forest vs XGBoost (Top 15 by RF)",
-             fontsize=13, fontweight="bold")
+ax.set_title(
+    "Feature Importance: Random Forest vs XGBoost (Top 15 by RF)",
+    fontsize=13,
+    fontweight="bold",
+)
 ax.legend(fontsize=11)
 ax.grid(axis="y", alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "feature_importance_rf_vs_xgb.png", dpi=300,
-            bbox_inches="tight")
+plt.savefig(
+    OUTPUT_DIR / "feature_importance_rf_vs_xgb.png", dpi=300, bbox_inches="tight"
+)
 print("✓ Saved: feature_importance_rf_vs_xgb.png")
 plt.close()
 
@@ -268,40 +353,54 @@ plt.close()
 # ==============================================================================
 print("Step 7: Plotting feature importance comparison (linear models)...")
 
-lr_imp  = pd.read_csv("models/logreg_svm/feature_importance_lr.csv")
-svm_imp = pd.read_csv("models/logreg_svm/feature_importance_svm.csv")
+lr_imp = pd.read_csv(MODELS_DIR / "logreg_svm" / "feature_importance_lr.csv")
+svm_imp = pd.read_csv(MODELS_DIR / "logreg_svm" / "feature_importance_svm.csv")
 
-top15_lr   = lr_imp.nlargest(15, "AbsCoefficient")["Feature"].tolist()
+top15_lr = lr_imp.nlargest(15, "AbsCoefficient")["Feature"].tolist()
 
-lr_coefs   = lr_imp.set_index("Feature").loc[top15_lr, "Coefficient"].values
-svm_coefs  = []
+lr_coefs = lr_imp.set_index("Feature").loc[top15_lr, "Coefficient"].values
+svm_coefs = []
 for feat in top15_lr:
     row = svm_imp[svm_imp["Feature"] == feat]
     svm_coefs.append(row["Coefficient"].values[0] if len(row) > 0 else 0)
 svm_coefs = np.array(svm_coefs)
 
-x     = np.arange(len(top15_lr))
+x = np.arange(len(top15_lr))
 bar_w = 0.38
 
 fig, ax = plt.subplots(figsize=(14, 7))
-ax.bar(x - bar_w/2, lr_coefs,  bar_w, label="Logistic Regression",
-       color=[COLORS["Logistic Regression"] if v > 0 else "#85c1e9" for v in lr_coefs],
-       alpha=0.85)
-ax.bar(x + bar_w/2, svm_coefs, bar_w, label="SVM (LinearSVC)",
-       color=[COLORS["SVM (LinearSVC)"] if v > 0 else "#d2b4de" for v in svm_coefs],
-       alpha=0.85)
+ax.bar(
+    x - bar_w / 2,
+    lr_coefs,
+    bar_w,
+    label="Logistic Regression",
+    color=[COLORS["Logistic Regression"] if v > 0 else "#85c1e9" for v in lr_coefs],
+    alpha=0.85,
+)
+ax.bar(
+    x + bar_w / 2,
+    svm_coefs,
+    bar_w,
+    label="SVM (LinearSVC)",
+    color=[COLORS["SVM (LinearSVC)"] if v > 0 else "#d2b4de" for v in svm_coefs],
+    alpha=0.85,
+)
 
 ax.axhline(0, color="black", linewidth=0.8)
 ax.set_xticks(x)
 ax.set_xticklabels(top15_lr, rotation=35, ha="right", fontsize=9)
 ax.set_ylabel("Coefficient Value\n(positive → NLOS, negative → LOS)", fontsize=11)
-ax.set_title("Feature Coefficients: Logistic Regression vs SVM (Top 15 by LR)",
-             fontsize=13, fontweight="bold")
+ax.set_title(
+    "Feature Coefficients: Logistic Regression vs SVM (Top 15 by LR)",
+    fontsize=13,
+    fontweight="bold",
+)
 ax.legend(fontsize=11)
 ax.grid(axis="y", alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "feature_importance_lr_vs_svm.png", dpi=300,
-            bbox_inches="tight")
+plt.savefig(
+    OUTPUT_DIR / "feature_importance_lr_vs_svm.png", dpi=300, bbox_inches="tight"
+)
 print("✓ Saved: feature_importance_lr_vs_svm.png")
 plt.close()
 
@@ -314,35 +413,58 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
 
 # NLOS Recall bar chart
 nlos_recalls = [metrics_df.loc[m, "NLOS Recall"] for m in model_names]
-bars = ax1.bar(model_names, nlos_recalls,
-               color=[COLORS[m] for m in model_names], alpha=0.85)
+bars = ax1.bar(
+    model_names, nlos_recalls, color=[COLORS[m] for m in model_names], alpha=0.85
+)
 for bar, val in zip(bars, nlos_recalls):
-    ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.002,
-             f"{val:.4f}", ha="center", va="bottom", fontsize=10,
-             fontweight="bold")
+    ax1.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height() + 0.002,
+        f"{val:.4f}",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        fontweight="bold",
+    )
 ax1.set_ylabel("NLOS Recall (True NLOS Rate)", fontsize=11)
-ax1.set_title("NLOS Recall per Model\n(higher = safer for positioning)",
-              fontsize=12, fontweight="bold")
+ax1.set_title(
+    "NLOS Recall per Model\n(higher = safer for positioning)",
+    fontsize=12,
+    fontweight="bold",
+)
 ax1.set_ylim(0, 1.08)
 ax1.set_xticklabels(model_names, rotation=15, ha="right")
 ax1.grid(axis="y", alpha=0.3)
 
 # Dangerous false negatives (NLOS predicted as LOS)
 false_negs = [metrics_df.loc[m, "NLOS FalseNeg"] for m in model_names]
-bars2 = ax2.bar(model_names, false_negs,
-                color=[COLORS[m] for m in model_names], alpha=0.85)
+bars2 = ax2.bar(
+    model_names, false_negs, color=[COLORS[m] for m in model_names], alpha=0.85
+)
 for bar, val in zip(bars2, false_negs):
-    ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 20,
-             f"{int(val):,}", ha="center", va="bottom", fontsize=10,
-             fontweight="bold")
+    ax2.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height() + 20,
+        f"{int(val):,}",
+        ha="center",
+        va="bottom",
+        fontsize=10,
+        fontweight="bold",
+    )
 ax2.set_ylabel("Count of Dangerous Errors", fontsize=11)
-ax2.set_title("NLOS Misclassified as LOS\n(lower = safer for positioning)",
-              fontsize=12, fontweight="bold")
+ax2.set_title(
+    "NLOS Misclassified as LOS\n(lower = safer for positioning)",
+    fontsize=12,
+    fontweight="bold",
+)
 ax2.set_xticklabels(model_names, rotation=15, ha="right")
 ax2.grid(axis="y", alpha=0.3)
 
-fig.suptitle("Positioning Safety Analysis – NLOS Detection Performance",
-             fontsize=14, fontweight="bold")
+fig.suptitle(
+    "Positioning Safety Analysis – NLOS Detection Performance",
+    fontsize=14,
+    fontweight="bold",
+)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "nlos_safety_comparison.png", dpi=300, bbox_inches="tight")
 print("✓ Saved: nlos_safety_comparison.png")
@@ -355,22 +477,31 @@ print()
 print("=" * 80)
 print("FINAL METRICS SUMMARY")
 print("=" * 80)
-display_cols = ["Accuracy", "Precision", "Recall", "F1-Score",
-                "ROC-AUC", "NLOS Recall", "NLOS FalseNeg"]
+display_cols = [
+    "Accuracy",
+    "Precision",
+    "Recall",
+    "F1-Score",
+    "ROC-AUC",
+    "NLOS Recall",
+    "NLOS FalseNeg",
+]
 print(metrics_df[display_cols].to_string(float_format=lambda x: f"{x:.4f}"))
 print()
 
-best_f1     = metrics_df["F1-Score"].idxmax()
-best_auc    = metrics_df["ROC-AUC"].idxmax()
+best_f1 = metrics_df["F1-Score"].idxmax()
+best_auc = metrics_df["ROC-AUC"].idxmax()
 best_safety = metrics_df["NLOS Recall"].idxmax()
-fewest_fn   = metrics_df["NLOS FalseNeg"].idxmin()
+fewest_fn = metrics_df["NLOS FalseNeg"].idxmin()
 
 print("BEST MODEL BY METRIC:")
-print(f"   Highest F1-Score  : {best_f1}   ({metrics_df.loc[best_f1,  'F1-Score']:.4f})")
+print(f"   Highest F1-Score  : {best_f1}   ({metrics_df.loc[best_f1, 'F1-Score']:.4f})")
 print(f"   Highest ROC-AUC   : {best_auc}  ({metrics_df.loc[best_auc, 'ROC-AUC']:.4f})")
 print(f"   Highest NLOS Recall (safest): {best_safety}")
-print(f"   Fewest dangerous errors     : {fewest_fn} "
-      f"({int(metrics_df.loc[fewest_fn, 'NLOS FalseNeg']):,} errors)")
+print(
+    f"   Fewest dangerous errors     : {fewest_fn} "
+    f"({int(metrics_df.loc[fewest_fn, 'NLOS FalseNeg']):,} errors)"
+)
 
 # ==============================================================================
 # STEP 10: PAIR CLASSIFIER — side-by-side vs per-path classifiers
@@ -378,21 +509,21 @@ print(f"   Fewest dangerous errors     : {fewest_fn} "
 print()
 print("Step 10: Loading pair classifier results...")
 
-PAIR_DIR = Path("./models/pair_classifier")
+PAIR_DIR = MODELS_DIR / "pair_classifier"
 
 try:
-    y_test_pair   = np.load(PAIR_DIR / "y_test_pair.npy")
-    y_pred_pair   = {
-        "Pair RF"      : np.load(PAIR_DIR / "y_pred_rf.npy"),
-        "Pair XGBoost" : np.load(PAIR_DIR / "y_pred_xgb.npy"),
+    y_test_pair = np.load(PAIR_DIR / "y_test_pair.npy")
+    y_pred_pair = {
+        "Pair RF": np.load(PAIR_DIR / "y_pred_rf.npy"),
+        "Pair XGBoost": np.load(PAIR_DIR / "y_pred_xgb.npy"),
     }
-    y_proba_pair  = {
-        "Pair RF"      : np.load(PAIR_DIR / "y_proba_rf.npy"),
-        "Pair XGBoost" : np.load(PAIR_DIR / "y_proba_xgb.npy"),
+    y_proba_pair = {
+        "Pair RF": np.load(PAIR_DIR / "y_proba_rf.npy"),
+        "Pair XGBoost": np.load(PAIR_DIR / "y_proba_xgb.npy"),
     }
     PAIR_COLORS = {
-        "Pair RF"      : "#1abc9c",
-        "Pair XGBoost" : "#e67e22",
+        "Pair RF": "#1abc9c",
+        "Pair XGBoost": "#e67e22",
     }
     CLASS_NAMES_PAIR = ["LOS+NLOS", "NLOS+NLOS"]
     pair_loaded = True
@@ -407,24 +538,41 @@ if pair_loaded:
     print("   Plotting pair confusion matrices...")
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for ax, (name, yp) in zip(axes, y_pred_pair.items()):
-        cm    = confusion_matrix(y_test_pair, yp)
+        cm = confusion_matrix(y_test_pair, yp)
         total = cm.sum()
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Greens", ax=ax,
-                    xticklabels=CLASS_NAMES_PAIR,
-                    yticklabels=CLASS_NAMES_PAIR, linewidths=0.5)
-        ax.set_title(f"{name}", fontsize=13, fontweight="bold",
-                     color=PAIR_COLORS[name])
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Greens",
+            ax=ax,
+            xticklabels=CLASS_NAMES_PAIR,
+            yticklabels=CLASS_NAMES_PAIR,
+            linewidths=0.5,
+        )
+        ax.set_title(f"{name}", fontsize=13, fontweight="bold", color=PAIR_COLORS[name])
         ax.set_xlabel("Predicted Pair", fontsize=11)
-        ax.set_ylabel("Actual Pair",    fontsize=11)
+        ax.set_ylabel("Actual Pair", fontsize=11)
         for i in range(2):
             for j in range(2):
-                ax.text(j + 0.5, i + 0.75, f"({cm[i,j]/total*100:.1f}%)",
-                        ha="center", va="center", fontsize=9, color="red")
-    fig.suptitle("Pair-Level Classification: LOS+NLOS vs NLOS+NLOS",
-                 fontsize=14, fontweight="bold")
+                ax.text(
+                    j + 0.5,
+                    i + 0.75,
+                    f"({cm[i, j] / total * 100:.1f}%)",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="red",
+                )
+    fig.suptitle(
+        "Pair-Level Classification: LOS+NLOS vs NLOS+NLOS",
+        fontsize=14,
+        fontweight="bold",
+    )
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "pair_confusion_matrices.png", dpi=300,
-                bbox_inches="tight")
+    plt.savefig(
+        OUTPUT_DIR / "pair_confusion_matrices.png", dpi=300, bbox_inches="tight"
+    )
     print("   ✓ Saved: pair_confusion_matrices.png")
     plt.close()
 
@@ -435,92 +583,128 @@ if pair_loaded:
     compare_rows = []
     # Best per-path model (highest F1)
     for mname in ["Random Forest", "XGBoost"]:
-        compare_rows.append({
-            "Model"     : f"{mname}\n(per-path)",
-            "Accuracy"  : accuracy_score(y_test, y_pred[mname]),
-            "F1-Score"  : f1_score(y_test, y_pred[mname]),
-            "ROC-AUC"   : roc_auc_score(y_test, y_proba[mname]),
-            "Type"      : "Per-Path",
-        })
+        compare_rows.append(
+            {
+                "Model": f"{mname}\n(per-path)",
+                "Accuracy": accuracy_score(y_test, y_pred[mname]),
+                "F1-Score": f1_score(y_test, y_pred[mname]),
+                "ROC-AUC": roc_auc_score(y_test, y_proba[mname]),
+                "Type": "Per-Path",
+            }
+        )
     for mname in ["Pair RF", "Pair XGBoost"]:
-        compare_rows.append({
-            "Model"     : f"{mname}\n(pair-level)",
-            "Accuracy"  : accuracy_score(y_test_pair, y_pred_pair[mname]),
-            "F1-Score"  : f1_score(y_test_pair, y_pred_pair[mname]),
-            "ROC-AUC"   : roc_auc_score(y_test_pair, y_proba_pair[mname]),
-            "Type"      : "Pair-Level",
-        })
+        compare_rows.append(
+            {
+                "Model": f"{mname}\n(pair-level)",
+                "Accuracy": accuracy_score(y_test_pair, y_pred_pair[mname]),
+                "F1-Score": f1_score(y_test_pair, y_pred_pair[mname]),
+                "ROC-AUC": roc_auc_score(y_test_pair, y_proba_pair[mname]),
+                "Type": "Pair-Level",
+            }
+        )
 
     compare_df = pd.DataFrame(compare_rows)
     compare_df.to_csv(OUTPUT_DIR / "per_path_vs_pair_comparison.csv", index=False)
 
     metrics_plot = ["Accuracy", "F1-Score", "ROC-AUC"]
-    x      = np.arange(len(metrics_plot))
-    bw     = 0.18
-    n_m    = len(compare_rows)
-    offsets = np.linspace(-(bw * (n_m-1)/2), bw * (n_m-1)/2, n_m)
+    x = np.arange(len(metrics_plot))
+    bw = 0.18
+    n_m = len(compare_rows)
+    offsets = np.linspace(-(bw * (n_m - 1) / 2), bw * (n_m - 1) / 2, n_m)
     bar_colors = ["#2ecc71", "#f39c12", "#1abc9c", "#e67e22"]
 
     fig, ax = plt.subplots(figsize=(12, 6))
     for i, row in enumerate(compare_rows):
         scores = [row[m] for m in metrics_plot]
-        bars   = ax.bar(x + offsets[i], scores, bw,
-                        label=row["Model"].replace("\n", " "),
-                        color=bar_colors[i], alpha=0.85)
+        bars = ax.bar(
+            x + offsets[i],
+            scores,
+            bw,
+            label=row["Model"].replace("\n", " "),
+            color=bar_colors[i],
+            alpha=0.85,
+        )
         for bar, score in zip(bars, scores):
-            ax.text(bar.get_x() + bar.get_width()/2,
-                    bar.get_height() + 0.003,
-                    f"{score:.3f}", ha="center", va="bottom",
-                    fontsize=7, fontweight="bold")
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.003,
+                f"{score:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                fontweight="bold",
+            )
 
     ax.set_xticks(x)
     ax.set_xticklabels(metrics_plot, fontsize=12)
     ax.set_ylabel("Score", fontsize=12)
     ax.set_ylim(0, 1.1)
-    ax.set_title("Per-Path Classifiers vs Pair-Level Classifiers\n"
-                 "(Same dataset, different framing of the problem)",
-                 fontsize=13, fontweight="bold")
+    ax.set_title(
+        "Per-Path Classifiers vs Pair-Level Classifiers\n"
+        "(Same dataset, different framing of the problem)",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.legend(fontsize=9, ncol=2)
     ax.axvline(x=0.5, color="black", linestyle=":", alpha=0.3)
     # Shade to separate per-path from pair
     ax.axvspan(-0.5, 2.5, alpha=0.03, color="blue", label="_nolegend_")
     ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "per_path_vs_pair_comparison.png", dpi=300,
-                bbox_inches="tight")
+    plt.savefig(
+        OUTPUT_DIR / "per_path_vs_pair_comparison.png", dpi=300, bbox_inches="tight"
+    )
     print("   ✓ Saved: per_path_vs_pair_comparison.png")
     plt.close()
 
     # ── 10c: Combined ROC — pair models alongside per-path models ─────────────
     print("   Plotting combined ROC (all models including pair)...")
     fig, ax = plt.subplots(figsize=(9, 7))
-    ax.plot([0, 1], [0, 1], color="gray", linestyle="--",
-            linewidth=1.5, label="Random Classifier (AUC=0.500)")
+    ax.plot(
+        [0, 1],
+        [0, 1],
+        color="gray",
+        linestyle="--",
+        linewidth=1.5,
+        label="Random Classifier (AUC=0.500)",
+    )
 
     for mname in ["Random Forest", "XGBoost"]:
         fpr, tpr, _ = roc_curve(y_test, y_proba[mname])
-        auc          = roc_auc_score(y_test, y_proba[mname])
-        ax.plot(fpr, tpr, color=COLORS[mname], linewidth=2,
-                linestyle="-",
-                label=f"{mname} per-path (AUC={auc:.4f})")
+        auc = roc_auc_score(y_test, y_proba[mname])
+        ax.plot(
+            fpr,
+            tpr,
+            color=COLORS[mname],
+            linewidth=2,
+            linestyle="-",
+            label=f"{mname} per-path (AUC={auc:.4f})",
+        )
 
     for mname in ["Pair RF", "Pair XGBoost"]:
         fpr, tpr, _ = roc_curve(y_test_pair, y_proba_pair[mname])
-        auc          = roc_auc_score(y_test_pair, y_proba_pair[mname])
-        ax.plot(fpr, tpr, color=PAIR_COLORS[mname], linewidth=2,
-                linestyle="--",
-                label=f"{mname} pair-level (AUC={auc:.4f})")
+        auc = roc_auc_score(y_test_pair, y_proba_pair[mname])
+        ax.plot(
+            fpr,
+            tpr,
+            color=PAIR_COLORS[mname],
+            linewidth=2,
+            linestyle="--",
+            label=f"{mname} pair-level (AUC={auc:.4f})",
+        )
 
     ax.set_xlabel("False Positive Rate", fontsize=12)
     ax.set_ylabel("True Positive Rate", fontsize=12)
-    ax.set_title("ROC Curve: Per-Path vs Pair-Level Classifiers\n"
-                 "(solid = per-path  |  dashed = pair-level)",
-                 fontsize=13, fontweight="bold")
+    ax.set_title(
+        "ROC Curve: Per-Path vs Pair-Level Classifiers\n"
+        "(solid = per-path  |  dashed = pair-level)",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.legend(fontsize=9, loc="lower right")
     ax.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "roc_per_path_vs_pair.png", dpi=300,
-                bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "roc_per_path_vs_pair.png", dpi=300, bbox_inches="tight")
     print("   ✓ Saved: roc_per_path_vs_pair.png")
     plt.close()
 
@@ -528,10 +712,12 @@ if pair_loaded:
     print()
     print("  PAIR CLASSIFIER METRICS:")
     print(f"  {'Model':<22} {'Accuracy':>10} {'F1-Score':>10} {'ROC-AUC':>10}")
-    print(f"  {'-'*54}")
+    print(f"  {'-' * 54}")
     for row in compare_rows:
-        print(f"  {row['Model'].replace(chr(10),' '):<22} "
-              f"{row['Accuracy']:>10.4f} {row['F1-Score']:>10.4f} {row['ROC-AUC']:>10.4f}")
+        print(
+            f"  {row['Model'].replace(chr(10), ' '):<22} "
+            f"{row['Accuracy']:>10.4f} {row['F1-Score']:>10.4f} {row['ROC-AUC']:>10.4f}"
+        )
     print()
 
 print()

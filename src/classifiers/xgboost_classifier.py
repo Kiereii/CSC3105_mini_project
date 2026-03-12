@@ -29,7 +29,7 @@ from sklearn.metrics import (
     roc_curve,
     roc_auc_score,
 )
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from pathlib import Path
 import joblib
 import time
@@ -38,39 +38,29 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# ==============================================================================
 # CONFIGURATION
-# ==============================================================================
-RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RUN_NAME = os.getenv("RUN_NAME", "split_env_70_15_15_seed42")
 DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
 OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "xgboost"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 RUN_TUNING = os.getenv("RUN_TUNING", "1") == "1"
+USE_GPU = os.getenv("USE_GPU", "0") == "1"
+XGB_DEVICE = "cuda" if USE_GPU else "cpu"
+XGB_TREE_METHOD = "hist"
 
-print("=" * 80)
-print("XGBOOST CLASSIFIER - UWB LOS/NLOS PREDICTION")
-print("=" * 80)
-print()
-print("Key difference from Random Forest:")
-print("  RF  → Bagging: builds N trees IN PARALLEL on random data subsets")
-print("  XGB → Boosting: builds N trees IN SEQUENCE, each correcting the last")
-print()
-
-# ==============================================================================
-# STEP 1: LOAD PREPROCESSED DATA
-# ==============================================================================
-print("Step 1: Loading preprocessed data...")
-print("(Using UNSCALED data - XGBoost is tree-based, no scaling needed)")
+print("XGBOOST")
+print(f"Backend: {'GPU (CUDA)' if USE_GPU else 'CPU'}")
 print()
 
 X_train = np.load(DATA_DIR / "X_train_unscaled.npy")
+X_val = np.load(DATA_DIR / "X_val_unscaled.npy")
 X_test = np.load(DATA_DIR / "X_test_unscaled.npy")
 y_train = np.load(DATA_DIR / "y_train.npy")
+y_val = np.load(DATA_DIR / "y_val.npy")
 y_test = np.load(DATA_DIR / "y_test.npy")
 
-# Load feature names - same parsing logic as random_forest_classifier.py
 with open(DATA_DIR / "feature_names.txt", "r") as f:
     lines = f.readlines()
 
@@ -88,16 +78,16 @@ for line in lines:
             feature_names.append(f"CIR{i}")
         break
 
-print(f"Training set : {X_train.shape}")
-print(f"Test set     : {X_test.shape}")
-print(f"Features     : {len(feature_names)}")
+print(f"Training set   : {X_train.shape}")
+print(f"Validation set : {X_val.shape}")
+print(f"Test set       : {X_test.shape}")
+print(f"Features       : {len(feature_names)}")
 print(f"  LOS  in train : {np.sum(y_train == 0):,}")
 print(f"  NLOS in train : {np.sum(y_train == 1):,}")
 print()
 
-# ==============================================================================
-# STEP 2: HYPERPARAMETER TUNING (RandomizedSearchCV)
-# ==============================================================================
+# HYPERPARAMETER TUNING (RandomizedSearchCV)
+# searches across key XGBoost hyperparameters to find best config
 print("Step 2: Hyperparameter Tuning...")
 print("-" * 80)
 
@@ -113,23 +103,28 @@ print(
 print()
 
 if RUN_TUNING:
-    print("Running RandomizedSearchCV (10 iterations, 3-fold CV)...")
-    print("This searches across key XGBoost hyperparameters to find best config.")
+    print("Running RandomizedSearchCV (80 iterations, 5-fold CV)...")
     print()
 
     param_grid = {
-        "n_estimators": [100, 200, 300],  # Number of boosting rounds
-        "max_depth": [3, 5, 7],  # Depth of each tree
-        "learning_rate": [0.05, 0.1, 0.2],  # Step size shrinkage
-        "subsample": [0.7, 0.8, 1.0],  # Row sampling per tree
-        "colsample_bytree": [0.7, 0.8, 1.0],  # Feature sampling per tree
-        "reg_alpha": [0, 0.1, 0.5],  # L1 regularisation
-        "reg_lambda": [1, 1.5, 2],  # L2 regularisation
+        "n_estimators": [200, 400, 600, 800, 1000],
+        "max_depth": [3, 4, 5, 6, 8, 10],
+        "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.15, 0.2],
+        "min_child_weight": [1, 3, 5, 7, 10],
+        "gamma": [0.0, 0.1, 0.3, 0.5, 1.0],
+        "subsample": [0.6, 0.7, 0.8, 0.9, 1.0],
+        "colsample_bytree": [0.6, 0.7, 0.8, 0.9, 1.0],
+        "reg_alpha": [0.0, 0.01, 0.1, 0.5, 1.0],
+        "reg_lambda": [0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
     }
+
+    cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
 
     base_xgb = XGBClassifier(
         objective="binary:logistic",
         eval_metric="logloss",
+        tree_method=XGB_TREE_METHOD,
+        device=XGB_DEVICE,
         scale_pos_weight=scale_pos_weight,
         random_state=RANDOM_SEED,
         n_jobs=-1,
@@ -139,11 +134,11 @@ if RUN_TUNING:
     search = RandomizedSearchCV(
         estimator=base_xgb,
         param_distributions=param_grid,
-        n_iter=10,  # 10 random combinations (increase if time allows)
-        cv=3,  # 3-fold cross validation
+        n_iter=80,
+        cv=cv_strategy,
         scoring="f1",  # Optimise for F1 (balance precision & recall)
         random_state=RANDOM_SEED,
-        n_jobs=-1,
+        n_jobs=1 if USE_GPU else -1,
         verbose=1,
     )
 
@@ -183,26 +178,49 @@ xgb_model = XGBClassifier(
     **best_params,
     objective="binary:logistic",
     eval_metric="logloss",
+    tree_method=XGB_TREE_METHOD,
+    device=XGB_DEVICE,
     scale_pos_weight=scale_pos_weight,
     random_state=RANDOM_SEED,
     n_jobs=-1,
+    early_stopping_rounds=30,
     verbosity=1,
 )
 
 t0 = time.time()
-xgb_model.fit(X_train, y_train)
+xgb_model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
 training_time = time.time() - t0
 
 print(f"\n✓ Training completed in {training_time:.2f} seconds")
 print()
 
-# ==============================================================================
-# STEP 4: MAKE PREDICTIONS
-# ==============================================================================
-print("Step 4: Making predictions...")
+# Tune decision threshold on validation set
+print("Step 3.5: Tuning decision threshold on validation set...")
+val_pred_proba = xgb_model.predict_proba(X_val)[:, 1]
 
-y_pred = xgb_model.predict(X_test)
+thresholds = np.arange(0.10, 0.91, 0.01)
+best_threshold = 0.50
+best_f1 = -1.0
+best_recall = -1.0
+
+for t in thresholds:
+    val_pred_t = (val_pred_proba >= t).astype(int)
+    f1_t = f1_score(y_val, val_pred_t)
+    recall_t = recall_score(y_val, val_pred_t)
+    if (f1_t > best_f1) or (f1_t == best_f1 and recall_t > best_recall):
+        best_f1 = f1_t
+        best_recall = recall_t
+        best_threshold = t
+
+print(f"  Best threshold: {best_threshold:.2f}")
+print(f"  Validation F1: {best_f1:.4f}")
+print(f"  Validation Recall: {best_recall:.4f}")
+print()
+
+print("Step 4: Predictions...")
+
 y_pred_proba = xgb_model.predict_proba(X_test)[:, 1]  # Probability of NLOS (class 1)
+y_pred = (y_pred_proba >= best_threshold).astype(int)
 
 print("✓ Predictions completed")
 print()
@@ -475,12 +493,18 @@ with open(OUTPUT_DIR / "model_results_xgb.txt", "w") as f:
     f.write(f"Dataset: UWB LOS/NLOS\n")
     f.write(f"Features: {len(feature_names)} (core + CIR 730-849)\n")
     f.write(f"Training samples: {len(X_train):,}\n")
+    f.write(f"Validation samples: {len(X_val):,}\n")
     f.write(f"Test samples    : {len(X_test):,}\n\n")
     f.write("MODEL CONFIGURATION:\n")
     for k, v in best_params.items():
         f.write(f"  - {k}: {v}\n")
     f.write(f"  - scale_pos_weight: {scale_pos_weight:.4f}\n")
+    f.write(f"  - decision_threshold: {best_threshold:.2f}\n")
     f.write(f"  - random_state    : {RANDOM_SEED}\n\n")
+    f.write("VALIDATION THRESHOLD TUNING:\n")
+    f.write(f"  - Best threshold: {best_threshold:.2f}\n")
+    f.write(f"  - Validation F1: {best_f1:.4f}\n")
+    f.write(f"  - Validation Recall: {best_recall:.4f}\n\n")
     f.write("PERFORMANCE METRICS:\n")
     f.write(f"  - Accuracy  : {accuracy:.4f} ({accuracy * 100:.2f}%)\n")
     f.write(f"  - Precision : {precision:.4f}\n")
@@ -539,14 +563,6 @@ for f in [
     "model_results_xgb.txt",
     "feature_importance_xgb.csv",
 ]:
-    print(f"   • {f}")
+    print(f"   - {f}")
 print()
-print("=" * 80)
-print(" NEXT STEPS FOR YOUR TEAM:")
-print("   1. Compare model_results_xgb.txt with RF, LR, and SVM results")
-print("   2. Use roc_all_models.png in your report — it shows all 4 models at once")
-print("   3. Cross-compare feature_importance_xgb.csv vs RF's ranking:")
-print("      → Features consistently top-ranked = most robust UWB LOS/NLOS indicators")
-print("   4. Discuss: XGBoost (boosting) vs RF (bagging) — which handles")
-print("      NLOS misclassification better? Check NLOS recall in confusion matrices.")
 print("=" * 80)

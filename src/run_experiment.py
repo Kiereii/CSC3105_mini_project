@@ -47,7 +47,8 @@ def run_step(script_path: str, env: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run UWB experiment pipeline")
-    parser.add_argument("--test-size", type=float, default=0.2)
+    parser.add_argument("--val-size", type=float, default=0.15)
+    parser.add_argument("--test-size", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--skip-xgboost-tuning", action="store_true")
@@ -68,12 +69,24 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if (
+        args.val_size <= 0
+        or args.test_size <= 0
+        or (args.val_size + args.test_size) >= 1
+    ):
+        raise ValueError(
+            "--val-size and --test-size must be > 0 and their sum must be < 1."
+        )
+
+    train_size = 1 - args.val_size - args.test_size
+
     run_name = (
         args.run_name
-        or f"split_{int((1 - args.test_size) * 100)}_{int(args.test_size * 100)}_seed{args.seed}"
+        or f"split_env_{int(train_size * 100)}_{int(args.val_size * 100)}_{int(args.test_size * 100)}_seed{args.seed}"
     )
 
     env = os.environ.copy()
+    env["VAL_SIZE"] = str(args.val_size)
     env["TEST_SIZE"] = str(args.test_size)
     env["RANDOM_SEED"] = str(args.seed)
     env["RUN_NAME"] = run_name
@@ -101,6 +114,8 @@ def main() -> None:
     print("RUN CONFIG")
     print("=" * 80)
     print(f"RUN_NAME    : {run_name}")
+    print(f"SPLIT       : {train_size:.2f}/{args.val_size:.2f}/{args.test_size:.2f}")
+    print(f"VAL_SIZE    : {args.val_size}")
     print(f"TEST_SIZE   : {args.test_size}")
     print(f"RANDOM_SEED : {args.seed}")
     print(f"STEPS       : {', '.join(step_order)}")

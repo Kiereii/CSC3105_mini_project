@@ -29,12 +29,13 @@ from sklearn.metrics import (
     roc_curve,
     roc_auc_score,
 )
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_val_score
 from pathlib import Path
 import joblib
 import time
 import os
 import warnings
+import importlib
 
 warnings.filterwarnings("ignore")
 
@@ -46,9 +47,18 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 RUN_TUNING = os.getenv("RUN_TUNING", "1") == "1"
+TUNING_METHOD = os.getenv("TUNING_METHOD", "random").strip().lower()
+RANDOM_SEARCH_ITER = int(os.getenv("RANDOM_SEARCH_ITER", "80"))
+BAYES_TRIALS = int(os.getenv("BAYES_TRIALS", "80"))
 USE_GPU = os.getenv("USE_GPU", "0") == "1"
 XGB_DEVICE = "cuda" if USE_GPU else "cpu"
 XGB_TREE_METHOD = "hist"
+
+if TUNING_METHOD not in {"random", "bayes"}:
+    print(
+        f"Warning: Unknown TUNING_METHOD='{TUNING_METHOD}'. Falling back to 'random'."
+    )
+    TUNING_METHOD = "random"
 
 print("XGBOOST")
 print(f"Backend: {'GPU (CUDA)' if USE_GPU else 'CPU'}")
@@ -103,52 +113,122 @@ print(
 print()
 
 if RUN_TUNING:
-    print("Running RandomizedSearchCV (80 iterations, 5-fold CV)...")
-    print()
-
-    param_grid = {
-        "n_estimators": [200, 400, 600, 800, 1000],
-        "max_depth": [3, 4, 5, 6, 8, 10],
-        "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.15, 0.2],
-        "min_child_weight": [1, 3, 5, 7, 10],
-        "gamma": [0.0, 0.1, 0.3, 0.5, 1.0],
-        "subsample": [0.6, 0.7, 0.8, 0.9, 1.0],
-        "colsample_bytree": [0.6, 0.7, 0.8, 0.9, 1.0],
-        "reg_alpha": [0.0, 0.01, 0.1, 0.5, 1.0],
-        "reg_lambda": [0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
-    }
-
     cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
 
-    base_xgb = XGBClassifier(
-        objective="binary:logistic",
-        eval_metric="logloss",
-        tree_method=XGB_TREE_METHOD,
-        device=XGB_DEVICE,
-        scale_pos_weight=scale_pos_weight,
-        random_state=RANDOM_SEED,
-        n_jobs=-1,
-        verbosity=0,
-    )
+    optuna_module = None
+    if TUNING_METHOD == "bayes":
+        try:
+            optuna_module = importlib.import_module("optuna")
+        except ImportError:
+            optuna_module = None
 
-    search = RandomizedSearchCV(
-        estimator=base_xgb,
-        param_distributions=param_grid,
-        n_iter=80,
-        cv=cv_strategy,
-        scoring="f1",  # Optimise for F1 (balance precision & recall)
-        random_state=RANDOM_SEED,
-        n_jobs=1 if USE_GPU else -1,
-        verbose=1,
-    )
+    if TUNING_METHOD == "bayes" and optuna_module is None:
+        print("Optuna is not installed. Falling back to RandomizedSearchCV.")
+        TUNING_METHOD = "random"
 
-    t0 = time.time()
-    search.fit(X_train, y_train)
-    tuning_time = time.time() - t0
+    if TUNING_METHOD == "random":
+        print(
+            f"Running RandomizedSearchCV ({RANDOM_SEARCH_ITER} iterations, {cv_strategy.n_splits}-fold CV)..."
+        )
+        print()
 
-    best_params = search.best_params_
+        param_grid = {
+            "n_estimators": [200, 400, 600, 800, 1000],
+            "max_depth": [3, 4, 5, 6, 8, 10],
+            "learning_rate": [0.01, 0.03, 0.05, 0.1, 0.15, 0.2],
+            "min_child_weight": [1, 3, 5, 7, 10],
+            "gamma": [0.0, 0.1, 0.3, 0.5, 1.0],
+            "subsample": [0.6, 0.7, 0.8, 0.9, 1.0],
+            "colsample_bytree": [0.6, 0.7, 0.8, 0.9, 1.0],
+            "reg_alpha": [0.0, 0.01, 0.1, 0.5, 1.0],
+            "reg_lambda": [0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
+        }
+
+        base_xgb = XGBClassifier(
+            objective="binary:logistic",
+            eval_metric="logloss",
+            tree_method=XGB_TREE_METHOD,
+            device=XGB_DEVICE,
+            scale_pos_weight=scale_pos_weight,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+            verbosity=0,
+        )
+
+        search = RandomizedSearchCV(
+            estimator=base_xgb,
+            param_distributions=param_grid,
+            n_iter=RANDOM_SEARCH_ITER,
+            cv=cv_strategy,
+            scoring="f1",  # Optimise for F1 (balance precision & recall)
+            random_state=RANDOM_SEED,
+            n_jobs=1 if USE_GPU else -1,
+            verbose=1,
+        )
+
+        t0 = time.time()
+        search.fit(X_train, y_train)
+        tuning_time = time.time() - t0
+
+        best_params = search.best_params_
+        best_cv_f1 = search.best_score_
+
+    else:
+        if optuna_module is None:
+            raise RuntimeError("Optuna not available for Bayesian optimization")
+
+        print(f"Running Bayesian optimization ({BAYES_TRIALS} trials, 5-fold CV)...")
+        print()
+
+        sampler = optuna_module.samplers.TPESampler(seed=RANDOM_SEED)
+        study = optuna_module.create_study(direction="maximize", sampler=sampler)
+
+        def objective(trial):
+            params = {
+                "n_estimators": trial.suggest_int("n_estimators", 200, 1000, step=100),
+                "max_depth": trial.suggest_int("max_depth", 3, 10),
+                "learning_rate": trial.suggest_float(
+                    "learning_rate", 0.01, 0.2, log=True
+                ),
+                "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+                "gamma": trial.suggest_float("gamma", 0.0, 1.0),
+                "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 1.0),
+                "reg_lambda": trial.suggest_float("reg_lambda", 0.5, 5.0),
+            }
+
+            model = XGBClassifier(
+                **params,
+                objective="binary:logistic",
+                eval_metric="logloss",
+                tree_method=XGB_TREE_METHOD,
+                device=XGB_DEVICE,
+                scale_pos_weight=scale_pos_weight,
+                random_state=RANDOM_SEED,
+                n_jobs=1,
+                verbosity=0,
+            )
+
+            scores = cross_val_score(
+                model,
+                X_train,
+                y_train,
+                cv=cv_strategy,
+                scoring="f1",
+                n_jobs=1 if USE_GPU else -1,
+            )
+            return float(np.mean(scores))
+
+        t0 = time.time()
+        study.optimize(objective, n_trials=BAYES_TRIALS, n_jobs=1)
+        tuning_time = time.time() - t0
+
+        best_params = study.best_params
+        best_cv_f1 = study.best_value
+
     print(f"\n✓ Tuning completed in {tuning_time:.2f} seconds")
-    print(f"✓ Best CV F1 score : {search.best_score_:.4f}")
+    print(f"✓ Best CV F1 score : {best_cv_f1:.4f}")
     print(f"\n  Best hyperparameters found:")
     for k, v in best_params.items():
         print(f"    {k:20s}: {v}")
@@ -301,6 +381,175 @@ plt.savefig(
 )
 print("✓ Saved: confusion_matrix_and_roc_xgb.png")
 plt.close()
+
+# ==============================================================================
+# STEP 6.5: ERROR ANALYSIS
+# ==============================================================================
+print("\nStep 6.5: Error Analysis...")
+print("=" * 80)
+
+misclassified_mask = y_pred != y_test
+correct_mask = ~misclassified_mask
+n_errors = misclassified_mask.sum()
+n_correct = correct_mask.sum()
+
+fp_mask = (y_pred == 1) & (y_test == 0)  # Predicted NLOS, actually LOS
+fn_mask = (y_pred == 0) & (y_test == 1)  # Predicted LOS, actually NLOS
+n_fp = fp_mask.sum()
+n_fn = fn_mask.sum()
+
+print(f"\n  Total test samples   : {len(y_test):,}")
+print(f"  Correctly classified : {n_correct:,} ({n_correct / len(y_test) * 100:.1f}%)")
+print(f"  Misclassified        : {n_errors:,} ({n_errors / len(y_test) * 100:.1f}%)")
+print(f"    - False Positives (LOS→NLOS) : {n_fp:,}")
+print(f"    - False Negatives (NLOS→LOS) : {n_fn:,}")
+print()
+
+# Confidence analysis: how confident was the model when it was wrong?
+error_probs = y_pred_proba[misclassified_mask]
+correct_probs = y_pred_proba[correct_mask]
+
+# Errors near decision boundary (probability between 0.3 and 0.7)
+boundary_low, boundary_high = 0.3, 0.7
+near_boundary = np.sum(
+    (error_probs >= boundary_low) & (error_probs <= boundary_high)
+)
+confident_errors = n_errors - near_boundary
+
+print(f"  CONFIDENCE ANALYSIS:")
+print(f"  {'-' * 40}")
+print(
+    f"  Errors near boundary ({boundary_low}-{boundary_high}): "
+    f"{near_boundary:,} / {n_errors:,} ({near_boundary / max(n_errors, 1) * 100:.1f}%)"
+)
+print(
+    f"  Confident errors (outside boundary)  : "
+    f"{confident_errors:,} / {n_errors:,} ({confident_errors / max(n_errors, 1) * 100:.1f}%)"
+)
+
+if n_errors > 0:
+    print(f"\n  Error probability stats:")
+    print(f"    Mean  : {np.mean(error_probs):.4f}")
+    print(f"    Median: {np.median(error_probs):.4f}")
+    print(f"    Std   : {np.std(error_probs):.4f}")
+    print(f"    Min   : {np.min(error_probs):.4f}")
+    print(f"    Max   : {np.max(error_probs):.4f}")
+print()
+
+# Feature analysis: which features differ most between correct and misclassified?
+print(f"  TOP FEATURES DISTINGUISHING ERRORS FROM CORRECT:")
+print(f"  {'-' * 50}")
+
+feat_diffs = []
+for i, fname in enumerate(feature_names):
+    mean_correct = np.mean(X_test[correct_mask, i])
+    mean_error = np.mean(X_test[misclassified_mask, i])
+    std_correct = np.std(X_test[correct_mask, i])
+    # Normalised difference (effect size) - avoids division by zero
+    if std_correct > 1e-10:
+        effect = abs(mean_error - mean_correct) / std_correct
+    else:
+        effect = 0.0
+    feat_diffs.append((fname, effect, mean_correct, mean_error))
+
+feat_diffs.sort(key=lambda x: x[1], reverse=True)
+
+for rank, (fname, effect, m_corr, m_err) in enumerate(feat_diffs[:10], 1):
+    print(
+        f"    {rank:2d}. {fname:15s}  effect={effect:.3f}  "
+        f"(correct_mean={m_corr:.4f}, error_mean={m_err:.4f})"
+    )
+print()
+
+# Visualisation: 2x2 grid
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+# (1) Probability distribution: correct vs misclassified
+axes[0, 0].hist(
+    correct_probs, bins=50, alpha=0.6, color="#2ecc71", label="Correct", density=True
+)
+axes[0, 0].hist(
+    error_probs, bins=50, alpha=0.6, color="#e74c3c", label="Misclassified", density=True
+)
+axes[0, 0].axvline(x=best_threshold, color="black", linestyle="--", label=f"Threshold ({best_threshold:.2f})")
+axes[0, 0].set_xlabel("Predicted Probability (NLOS)")
+axes[0, 0].set_ylabel("Density")
+axes[0, 0].set_title("Prediction Confidence: Correct vs Errors", fontweight="bold")
+axes[0, 0].legend()
+
+# (2) FP vs FN probability distributions
+if n_fp > 0:
+    axes[0, 1].hist(
+        y_pred_proba[fp_mask], bins=30, alpha=0.6, color="#3498db",
+        label=f"FP – LOS→NLOS ({n_fp})", density=True
+    )
+if n_fn > 0:
+    axes[0, 1].hist(
+        y_pred_proba[fn_mask], bins=30, alpha=0.6, color="#e67e22",
+        label=f"FN – NLOS→LOS ({n_fn})", density=True
+    )
+axes[0, 1].axvline(x=best_threshold, color="black", linestyle="--", label=f"Threshold")
+axes[0, 1].set_xlabel("Predicted Probability (NLOS)")
+axes[0, 1].set_ylabel("Density")
+axes[0, 1].set_title("False Positives vs False Negatives", fontweight="bold")
+axes[0, 1].legend()
+
+# (3) Top 10 features with largest effect size (error vs correct)
+top_feats = feat_diffs[:10]
+feat_labels = [f[0] for f in top_feats][::-1]
+feat_effects = [f[1] for f in top_feats][::-1]
+axes[1, 0].barh(feat_labels, feat_effects, color="#9b59b6", alpha=0.8)
+axes[1, 0].set_xlabel("Effect Size (|mean_diff| / std)")
+axes[1, 0].set_title("Features Most Different in Errors", fontweight="bold")
+axes[1, 0].grid(axis="x", alpha=0.3)
+
+# (4) Error rate by confidence bin
+prob_bins = np.linspace(0, 1, 11)
+bin_labels = []
+bin_error_rates = []
+for b in range(len(prob_bins) - 1):
+    in_bin = (y_pred_proba >= prob_bins[b]) & (y_pred_proba < prob_bins[b + 1])
+    n_in_bin = in_bin.sum()
+    if n_in_bin > 0:
+        err_rate = (y_pred[in_bin] != y_test[in_bin]).sum() / n_in_bin
+        bin_labels.append(f"{prob_bins[b]:.1f}-{prob_bins[b+1]:.1f}")
+        bin_error_rates.append(err_rate)
+axes[1, 1].bar(bin_labels, bin_error_rates, color="#f39c12", alpha=0.8)
+axes[1, 1].set_xlabel("Predicted Probability Bin")
+axes[1, 1].set_ylabel("Error Rate")
+axes[1, 1].set_title("Error Rate by Confidence Bin", fontweight="bold")
+axes[1, 1].tick_params(axis="x", rotation=45)
+axes[1, 1].grid(axis="y", alpha=0.3)
+
+plt.suptitle("XGBoost Error Analysis", fontsize=16, fontweight="bold", y=1.01)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "error_analysis_xgb.png", dpi=300, bbox_inches="tight")
+print("✓ Saved: error_analysis_xgb.png")
+plt.close()
+
+# Save error analysis report
+with open(OUTPUT_DIR / "error_analysis_xgb.txt", "w") as f:
+    f.write("XGBOOST ERROR ANALYSIS REPORT\n")
+    f.write("=" * 60 + "\n\n")
+    f.write(f"Total test samples   : {len(y_test):,}\n")
+    f.write(f"Correctly classified : {n_correct:,} ({n_correct / len(y_test) * 100:.1f}%)\n")
+    f.write(f"Misclassified        : {n_errors:,} ({n_errors / len(y_test) * 100:.1f}%)\n")
+    f.write(f"  False Positives (LOS predicted as NLOS) : {n_fp:,}\n")
+    f.write(f"  False Negatives (NLOS predicted as LOS) : {n_fn:,}\n\n")
+    f.write("CONFIDENCE ANALYSIS:\n")
+    f.write(f"  Errors near boundary ({boundary_low}-{boundary_high}): {near_boundary:,} ({near_boundary / max(n_errors, 1) * 100:.1f}%)\n")
+    f.write(f"  Confident errors: {confident_errors:,} ({confident_errors / max(n_errors, 1) * 100:.1f}%)\n")
+    if n_errors > 0:
+        f.write(f"\n  Error probability stats:\n")
+        f.write(f"    Mean  : {np.mean(error_probs):.4f}\n")
+        f.write(f"    Median: {np.median(error_probs):.4f}\n")
+        f.write(f"    Std   : {np.std(error_probs):.4f}\n\n")
+    f.write("TOP 10 FEATURES DISTINGUISHING ERRORS:\n")
+    for rank, (fname, effect, m_corr, m_err) in enumerate(feat_diffs[:10], 1):
+        f.write(f"  {rank:2d}. {fname:15s}  effect={effect:.3f}  (correct={m_corr:.4f}, error={m_err:.4f})\n")
+
+print("✓ Saved: error_analysis_xgb.txt")
+print()
 
 # ==============================================================================
 # STEP 7: FEATURE IMPORTANCE ANALYSIS
@@ -557,10 +806,12 @@ print(" Generated files:")
 for f in [
     "xgboost_model.pkl",
     "confusion_matrix_and_roc_xgb.png",
+    "error_analysis_xgb.png",
     "feature_importance_xgb.png",
     "importance_by_category_xgb.png",
     "roc_all_models.png",
     "model_results_xgb.txt",
+    "error_analysis_xgb.txt",
     "feature_importance_xgb.csv",
 ]:
     print(f"   - {f}")

@@ -4,40 +4,61 @@ UWB LOS/NLOS - Range Estimator (Regression)
 Part 2 of the project brief:
   "Predict the measured range for the two dominant shortest paths"
 
-Uses Random Forest Regressor (consistent with the classifier choice).
-Evaluates with RMSE, MAE, and R² for both Path 1 and Path 2.
+Models trained in this script:
+  1) RandomForestRegressor
+  2) KNeighborsRegressor
+  3) XGBRegressor (if xgboost is installed)
 
 Run second_path_features.py FIRST to generate the input .npy files.
 """
 
+from pathlib import Path
+import math
+import os
+import time
+import warnings
+
+import joblib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from pathlib import Path
-import joblib
-import time
-import os
-import warnings
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.preprocessing import StandardScaler
 
 warnings.filterwarnings("ignore")
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+try:
+    from xgboost import XGBRegressor
+
+    HAS_XGBOOST = True
+    XGB_IMPORT_ERROR = ""
+except Exception as exc:
+    HAS_XGBOOST = False
+    XGB_IMPORT_ERROR = str(exc)
+
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION
+# -----------------------------------------------------------------------------
 RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
 DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
 OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "range_regressor"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
+XGB_TREE_METHOD = os.getenv("XGB_TREE_METHOD", "hist")
 
 print("=" * 80)
-print("RANDOM FOREST RANGE ESTIMATOR — PATH 1 & PATH 2")
+print("MULTI-MODEL RANGE ESTIMATOR (RF + KNN + XGBOOST)")
 print("=" * 80)
 print()
 
-# ── Load data ──────────────────────────────────────────────────────────────────
+
+# -----------------------------------------------------------------------------
+# STEP 1: LOAD DATA
+# -----------------------------------------------------------------------------
 print("Step 1: Loading regression data...")
 
 X_train = np.load(DATA_DIR / "X_train_regression.npy")
@@ -47,186 +68,316 @@ y_p1_test = np.load(DATA_DIR / "y_range_p1_test.npy")
 y_p2_train = np.load(DATA_DIR / "y_range_p2_train.npy")
 y_p2_test = np.load(DATA_DIR / "y_range_p2_test.npy")
 
-with open(DATA_DIR / "regression_feature_names.txt") as f:
-    lines = f.readlines()
-
 print(f"  Training samples : {len(X_train):,}")
 print(f"  Test samples     : {len(X_test):,}")
 print(f"  Features         : {X_train.shape[1]}")
-print(f"  Path 1 range     : {y_p1_train.min():.2f} – {y_p1_train.max():.2f} m")
-print(f"  Path 2 range     : {y_p2_train.min():.2f} – {y_p2_train.max():.2f} m")
+print(f"  Path 1 range     : {y_p1_train.min():.2f} - {y_p1_train.max():.2f} m")
+print(f"  Path 2 range     : {y_p2_train.min():.2f} - {y_p2_train.max():.2f} m")
 print()
 
 
-# ── Helper: evaluate and report ────────────────────────────────────────────────
-def evaluate(y_true, y_pred, label):
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    print(f"  {label}")
-    print(f"    RMSE : {rmse:.4f} m")
-    print(f"    MAE  : {mae:.4f} m")
-    print(f"    R²   : {r2:.4f}")
+# KNN is distance-based and needs scaling. Tree models can use raw values.
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+# -----------------------------------------------------------------------------
+# HELPERS
+# -----------------------------------------------------------------------------
+def evaluate_metrics(y_true, y_pred):
+    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
+    mae = float(mean_absolute_error(y_true, y_pred))
+    r2 = float(r2_score(y_true, y_pred))
     return rmse, mae, r2
 
 
-# =============================================================================
-# STEP 2: PATH 1 RANGE ESTIMATOR
-# =============================================================================
-print("Step 2: Training Path 1 range estimator...")
-print("-" * 60)
+def fit_and_evaluate(model_name, path_label, model, X_tr, y_tr, X_te, y_te):
+    print(f"  {model_name} - {path_label}")
+    t0 = time.time()
+    model.fit(X_tr, y_tr)
+    train_time = time.time() - t0
 
-rf_p1 = RandomForestRegressor(
-    n_estimators=100,
-    max_depth=None,
-    min_samples_split=2,
-    random_state=RANDOM_SEED,
-    n_jobs=-1,
-    verbose=0,
-)
+    t1 = time.time()
+    y_pred = model.predict(X_te)
+    predict_time = time.time() - t1
 
-t0 = time.time()
-rf_p1.fit(X_train, y_p1_train)
-print(f"  ✓ Trained in {time.time() - t0:.1f}s")
+    rmse, mae, r2 = evaluate_metrics(y_te, y_pred)
 
-y_p1_pred = rf_p1.predict(X_test)
-p1_rmse, p1_mae, p1_r2 = evaluate(y_p1_test, y_p1_pred, "Path 1 Performance")
-print()
+    print(f"    Train time : {train_time:.2f}s")
+    print(f"    RMSE       : {rmse:.4f} m")
+    print(f"    MAE        : {mae:.4f} m")
+    print(f"    R2         : {r2:.4f}")
 
-# =============================================================================
-# STEP 3: PATH 2 RANGE ESTIMATOR
-# =============================================================================
-print("Step 3: Training Path 2 range estimator...")
-print("-" * 60)
+    return {
+        "model": model,
+        "y_pred": y_pred,
+        "train_time": train_time,
+        "predict_time": predict_time,
+        "rmse": rmse,
+        "mae": mae,
+        "r2": r2,
+    }
 
-rf_p2 = RandomForestRegressor(
-    n_estimators=100,
-    max_depth=None,
-    min_samples_split=2,
-    random_state=RANDOM_SEED,
-    n_jobs=-1,
-    verbose=0,
-)
 
-t0 = time.time()
-rf_p2.fit(X_train, y_p2_train)
-print(f"  ✓ Trained in {time.time() - t0:.1f}s")
+def build_model_specs():
+    specs = [
+        {
+            "key": "rf",
+            "name": "RandomForest",
+            "use_scaled": False,
+            "builder": lambda: RandomForestRegressor(
+                n_estimators=100,
+                max_depth=None,
+                min_samples_split=2,
+                random_state=RANDOM_SEED,
+                n_jobs=-1,
+                verbose=0,
+            ),
+        },
+        {
+            "key": "knn",
+            "name": "KNN",
+            "use_scaled": True,
+            "builder": lambda: KNeighborsRegressor(
+                n_neighbors=15,
+                weights="distance",
+                p=2,
+                n_jobs=-1,
+            ),
+        },
+    ]
 
-y_p2_pred = rf_p2.predict(X_test)
-p2_rmse, p2_mae, p2_r2 = evaluate(y_p2_test, y_p2_pred, "Path 2 Performance")
-print()
+    if HAS_XGBOOST:
+        specs.append(
+            {
+                "key": "xgb",
+                "name": "XGBoost",
+                "use_scaled": False,
+                "builder": lambda: XGBRegressor(
+                    objective="reg:squarederror",
+                    eval_metric="rmse",
+                    n_estimators=300,
+                    max_depth=6,
+                    learning_rate=0.05,
+                    subsample=0.9,
+                    colsample_bytree=0.9,
+                    reg_alpha=0.0,
+                    reg_lambda=1.0,
+                    tree_method=XGB_TREE_METHOD,
+                    random_state=RANDOM_SEED,
+                    n_jobs=-1,
+                    verbosity=0,
+                ),
+            }
+        )
+    else:
+        print("Warning: xgboost not available, skipping XGBoost regressor.")
+        print(f"  Import error: {XGB_IMPORT_ERROR}")
+        print()
 
-# =============================================================================
-# STEP 4: VISUALIZATIONS
-# =============================================================================
-print("Step 4: Generating visualizations...")
+    return specs
 
-plt.style.use("seaborn-v0_8-darkgrid")
-fig, axes = plt.subplots(2, 3, figsize=(18, 11))
-fig.suptitle(
-    "Range Estimation Results — Path 1 & Path 2", fontsize=16, fontweight="bold"
-)
 
-# ── Row 0: Path 1 ──────────────────────────────────────────────────────────────
-# 0,0 — Predicted vs Actual scatter
-ax = axes[0, 0]
-ax.scatter(y_p1_test, y_p1_pred, alpha=0.3, s=8, color="#3498db", label="Predictions")
-lims = [min(y_p1_test.min(), y_p1_pred.min()), max(y_p1_test.max(), y_p1_pred.max())]
-ax.plot(lims, lims, "r--", linewidth=2, label="Perfect fit")
-ax.set_xlabel("Actual Range (m)")
-ax.set_ylabel("Predicted Range (m)")
-ax.set_title(
-    f"Path 1 — Predicted vs Actual\nR²={p1_r2:.4f}  RMSE={p1_rmse:.4f}m",
-    fontweight="bold",
-)
-ax.legend(fontsize=9)
+def summarize_best_models(results_df):
+    best = {}
+    for path_name in sorted(results_df["path"].unique()):
+        path_rows = results_df[results_df["path"] == path_name]
+        best_row = path_rows.sort_values("rmse", ascending=True).iloc[0]
+        best[path_name] = {
+            "model": best_row["model"],
+            "rmse": float(best_row["rmse"]),
+            "mae": float(best_row["mae"]),
+            "r2": float(best_row["r2"]),
+        }
+    return best
 
-# 0,1 — Residuals
-ax = axes[0, 1]
-residuals_p1 = y_p1_pred - y_p1_test
-ax.hist(residuals_p1, bins=60, color="#3498db", alpha=0.8, edgecolor="white")
-ax.axvline(0, color="red", linestyle="--", linewidth=2)
-ax.set_xlabel("Residual (m)")
-ax.set_ylabel("Count")
-ax.set_title(f"Path 1 — Residual Distribution\nMAE={p1_mae:.4f}m", fontweight="bold")
 
-# 0,2 — Absolute error vs actual range
-ax = axes[0, 2]
-ax.scatter(y_p1_test, np.abs(residuals_p1), alpha=0.3, s=8, color="#3498db")
-ax.axhline(p1_mae, color="red", linestyle="--", linewidth=2, label=f"MAE={p1_mae:.3f}m")
-ax.set_xlabel("Actual Range (m)")
-ax.set_ylabel("|Error| (m)")
-ax.set_title("Path 1 — Absolute Error vs Range", fontweight="bold")
-ax.legend(fontsize=9)
+# -----------------------------------------------------------------------------
+# STEP 2: TRAIN AND EVALUATE ALL MODELS
+# -----------------------------------------------------------------------------
+print("Step 2: Training and evaluating models...")
+print("-" * 80)
 
-# ── Row 1: Path 2 ──────────────────────────────────────────────────────────────
-# 1,0 — Predicted vs Actual scatter
-ax = axes[1, 0]
-ax.scatter(y_p2_test, y_p2_pred, alpha=0.3, s=8, color="#e74c3c", label="Predictions")
-lims = [min(y_p2_test.min(), y_p2_pred.min()), max(y_p2_test.max(), y_p2_pred.max())]
-ax.plot(lims, lims, "b--", linewidth=2, label="Perfect fit")
-ax.set_xlabel("Actual Range (m)")
-ax.set_ylabel("Predicted Range (m)")
-ax.set_title(
-    f"Path 2 — Predicted vs Actual\nR²={p2_r2:.4f}  RMSE={p2_rmse:.4f}m",
-    fontweight="bold",
-)
-ax.legend(fontsize=9)
+model_specs = build_model_specs()
 
-# 1,1 — Residuals
-ax = axes[1, 1]
-residuals_p2 = y_p2_pred - y_p2_test
-ax.hist(residuals_p2, bins=60, color="#e74c3c", alpha=0.8, edgecolor="white")
-ax.axvline(0, color="blue", linestyle="--", linewidth=2)
-ax.set_xlabel("Residual (m)")
-ax.set_ylabel("Count")
-ax.set_title(f"Path 2 — Residual Distribution\nMAE={p2_mae:.4f}m", fontweight="bold")
+results = {}
+rows = []
 
-# 1,2 — Side-by-side metrics comparison
-ax = axes[1, 2]
-metrics = ["RMSE (m)", "MAE (m)", "R²"]
-p1_vals = [p1_rmse, p1_mae, p1_r2]
-p2_vals = [p2_rmse, p2_mae, p2_r2]
-x = np.arange(len(metrics))
-width = 0.35
-bars1 = ax.bar(
-    x - width / 2, p1_vals, width, label="Path 1", color="#3498db", alpha=0.85
-)
-bars2 = ax.bar(
-    x + width / 2, p2_vals, width, label="Path 2", color="#e74c3c", alpha=0.85
-)
-ax.set_xticks(x)
-ax.set_xticklabels(metrics)
-ax.set_title("Path 1 vs Path 2 — Metrics Comparison", fontweight="bold")
-ax.legend()
-for bar in bars1:
-    ax.text(
-        bar.get_x() + bar.get_width() / 2,
-        bar.get_height(),
-        f"{bar.get_height():.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=8,
+for spec in model_specs:
+    model_key = spec["key"]
+    model_name = spec["name"]
+    use_scaled = spec["use_scaled"]
+
+    X_tr = X_train_scaled if use_scaled else X_train
+    X_te = X_test_scaled if use_scaled else X_test
+
+    print(f"\nTraining {model_name} ({'scaled input' if use_scaled else 'raw input'})")
+
+    p1_result = fit_and_evaluate(
+        model_name=model_name,
+        path_label="Path 1",
+        model=spec["builder"](),
+        X_tr=X_tr,
+        y_tr=y_p1_train,
+        X_te=X_te,
+        y_te=y_p1_test,
     )
-for bar in bars2:
-    ax.text(
-        bar.get_x() + bar.get_width() / 2,
-        bar.get_height(),
-        f"{bar.get_height():.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=8,
+    p2_result = fit_and_evaluate(
+        model_name=model_name,
+        path_label="Path 2",
+        model=spec["builder"](),
+        X_tr=X_tr,
+        y_tr=y_p2_train,
+        X_te=X_te,
+        y_te=y_p2_test,
+    )
+
+    results[(model_key, "p1")] = p1_result
+    results[(model_key, "p2")] = p2_result
+
+    rows.append(
+        {
+            "model": model_name,
+            "model_key": model_key,
+            "path": "Path 1",
+            "rmse": p1_result["rmse"],
+            "mae": p1_result["mae"],
+            "r2": p1_result["r2"],
+            "train_seconds": p1_result["train_time"],
+            "predict_seconds": p1_result["predict_time"],
+            "scaled_input": use_scaled,
+        }
+    )
+    rows.append(
+        {
+            "model": model_name,
+            "model_key": model_key,
+            "path": "Path 2",
+            "rmse": p2_result["rmse"],
+            "mae": p2_result["mae"],
+            "r2": p2_result["r2"],
+            "train_seconds": p2_result["train_time"],
+            "predict_seconds": p2_result["predict_time"],
+            "scaled_input": use_scaled,
+        }
+    )
+
+results_df = pd.DataFrame(rows)
+results_df = results_df.sort_values(
+    ["path", "rmse", "mae"], ascending=[True, True, True]
+)
+best_by_path = summarize_best_models(results_df)
+
+comparison_csv = OUTPUT_DIR / "regression_model_comparison.csv"
+results_df.to_csv(comparison_csv, index=False)
+print(f"\n  Saved: {comparison_csv.name}")
+
+
+# -----------------------------------------------------------------------------
+# STEP 3: VISUALIZATIONS
+# -----------------------------------------------------------------------------
+print("\nStep 3: Generating visualizations...")
+plt.style.use("seaborn-v0_8-darkgrid")
+
+model_order = [spec["key"] for spec in model_specs]
+model_name_map = {spec["key"]: spec["name"] for spec in model_specs}
+
+
+# 3A. Predicted vs actual scatter for each model/path
+n_models = len(model_order)
+fig, axes = plt.subplots(2, n_models, figsize=(6 * n_models, 10), squeeze=False)
+
+for col, model_key in enumerate(model_order):
+    model_name = model_name_map[model_key]
+
+    p1 = results[(model_key, "p1")]
+    ax = axes[0, col]
+    ax.scatter(y_p1_test, p1["y_pred"], alpha=0.25, s=8, color="#2d7dd2")
+    lims = [
+        min(y_p1_test.min(), p1["y_pred"].min()),
+        max(y_p1_test.max(), p1["y_pred"].max()),
+    ]
+    ax.plot(lims, lims, "k--", linewidth=1.5)
+    ax.set_xlabel("Actual Range (m)")
+    ax.set_ylabel("Predicted Range (m)")
+    ax.set_title(
+        f"Path 1 - {model_name}\nRMSE={p1['rmse']:.3f}  MAE={p1['mae']:.3f}  R2={p1['r2']:.3f}",
+        fontsize=11,
+        fontweight="bold",
+    )
+
+    p2 = results[(model_key, "p2")]
+    ax = axes[1, col]
+    ax.scatter(y_p2_test, p2["y_pred"], alpha=0.25, s=8, color="#d1495b")
+    lims = [
+        min(y_p2_test.min(), p2["y_pred"].min()),
+        max(y_p2_test.max(), p2["y_pred"].max()),
+    ]
+    ax.plot(lims, lims, "k--", linewidth=1.5)
+    ax.set_xlabel("Actual Range (m)")
+    ax.set_ylabel("Predicted Range (m)")
+    ax.set_title(
+        f"Path 2 - {model_name}\nRMSE={p2['rmse']:.3f}  MAE={p2['mae']:.3f}  R2={p2['r2']:.3f}",
+        fontsize=11,
+        fontweight="bold",
     )
 
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "range_estimation_results.png", dpi=300, bbox_inches="tight")
-print(f"  ✓ Saved: range_estimation_results.png")
 plt.close()
+print("  Saved: range_estimation_results.png")
 
-# ── Feature importance (Path 1) ────────────────────────────────────────────────
-print("  Plotting feature importance...")
 
-# Read feature names
+# 3B. Metrics comparison bars
+metrics = ["rmse", "mae", "r2"]
+metric_titles = {"rmse": "RMSE (m)", "mae": "MAE (m)", "r2": "R2"}
+fig, axes = plt.subplots(2, 3, figsize=(18, 10), squeeze=False)
+
+for row_idx, path_name in enumerate(["Path 1", "Path 2"]):
+    path_df = results_df[results_df["path"] == path_name].copy()
+    path_df["model"] = pd.Categorical(
+        path_df["model"],
+        categories=[model_name_map[m] for m in model_order],
+        ordered=True,
+    )
+    path_df = path_df.sort_values("model")
+
+    for col_idx, metric in enumerate(metrics):
+        ax = axes[row_idx, col_idx]
+        vals = path_df[metric].to_numpy()
+        labels = path_df["model"].astype(str).to_list()
+        bars = ax.bar(
+            labels,
+            vals,
+            color=["#2d7dd2", "#f4a259", "#3bb273"][: len(labels)],
+            alpha=0.9,
+        )
+        ax.set_title(f"{path_name} - {metric_titles[metric]}", fontweight="bold")
+        ax.set_ylabel(metric_titles[metric])
+        ax.tick_params(axis="x", rotation=15)
+
+        for bar in bars:
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                f"{bar.get_height():.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+plt.tight_layout()
+plt.savefig(
+    OUTPUT_DIR / "regression_metrics_comparison.png", dpi=300, bbox_inches="tight"
+)
+plt.close()
+print("  Saved: regression_metrics_comparison.png")
+
+
+# 3C. Feature importance for tree models (RF and XGBoost)
+print("  Plotting feature importance for tree models...")
+
 core_feats = [
     "FP_IDX",
     "FP_AMP1",
@@ -251,46 +402,71 @@ core_feats = [
 cir_feats = [f"CIR{i}" for i in range(730, 850)]
 feat_names = core_feats + cir_feats
 
-importances_p1 = rf_p1.feature_importances_
-importances_p2 = rf_p2.feature_importances_
+if len(feat_names) != X_train.shape[1]:
+    feat_names = [f"f{i}" for i in range(X_train.shape[1])]
 
-top_n = 20
-idx_p1 = np.argsort(importances_p1)[::-1][:top_n]
-idx_p2 = np.argsort(importances_p2)[::-1][:top_n]
+importance_items = []
+for tree_key, tree_name in [("rf", "RandomForest"), ("xgb", "XGBoost")]:
+    if (tree_key, "p1") in results:
+        importance_items.append(
+            (
+                tree_name,
+                "Path 1",
+                results[(tree_key, "p1")]["model"].feature_importances_,
+            )
+        )
+    if (tree_key, "p2") in results:
+        importance_items.append(
+            (
+                tree_name,
+                "Path 2",
+                results[(tree_key, "p2")]["model"].feature_importances_,
+            )
+        )
 
-fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+if importance_items:
+    top_n = 20
+    n_items = len(importance_items)
+    n_cols = 2
+    n_rows = int(math.ceil(n_items / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 6 * n_rows), squeeze=False)
 
-for ax, importances, indices, title, color in [
-    (axes[0], importances_p1, idx_p1, "Path 1 — Top 20 Feature Importances", "#3498db"),
-    (axes[1], importances_p2, idx_p2, "Path 2 — Top 20 Feature Importances", "#e74c3c"),
-]:
-    y_pos = np.arange(top_n)
-    ax.barh(y_pos, importances[indices], color=color, alpha=0.85)
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels([feat_names[i] for i in indices], fontsize=9)
-    ax.invert_yaxis()
-    ax.set_xlabel("Importance")
-    ax.set_title(title, fontweight="bold", fontsize=13)
-    ax.grid(axis="x", alpha=0.3)
+    for idx, (model_name, path_name, importances) in enumerate(importance_items):
+        row = idx // n_cols
+        col = idx % n_cols
+        ax = axes[row, col]
+        top_idx = np.argsort(importances)[::-1][:top_n]
+        y_pos = np.arange(top_n)
+        ax.barh(y_pos, importances[top_idx], color="#577590", alpha=0.9)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels([feat_names[i] for i in top_idx], fontsize=9)
+        ax.invert_yaxis()
+        ax.set_xlabel("Importance")
+        ax.set_title(f"{model_name} - {path_name} Top {top_n}", fontweight="bold")
+        ax.grid(axis="x", alpha=0.3)
 
-plt.suptitle("Feature Importance — Range Regressors", fontsize=15, fontweight="bold")
-plt.tight_layout()
-plt.savefig(
-    OUTPUT_DIR / "regressor_feature_importance.png", dpi=300, bbox_inches="tight"
-)
-print(f"  ✓ Saved: regressor_feature_importance.png")
-plt.close()
+    for idx in range(n_items, n_rows * n_cols):
+        row = idx // n_cols
+        col = idx % n_cols
+        axes[row, col].axis("off")
 
-# ── Two-path pair classification summary ──────────────────────────────────────
-# Per brief: determine if pair is LOS+NLOS or NLOS+NLOS
+    plt.tight_layout()
+    plt.savefig(
+        OUTPUT_DIR / "regressor_feature_importance.png", dpi=300, bbox_inches="tight"
+    )
+    plt.close()
+    print("  Saved: regressor_feature_importance.png")
+
+
+# 3D. Two-path pair classification summary (existing report artifact)
 pair_labels_path = DATA_DIR / "y_test_pair.npy"
 if pair_labels_path.exists():
     y_p1_class = np.load(pair_labels_path)
 else:
     y_p1_class = np.load(DATA_DIR / "y_test.npy")
 
-los_nlos_count = np.sum(y_p1_class == 0)  # LOS first path → pair = LOS+NLOS
-nlos_nlos_count = np.sum(y_p1_class == 1)  # NLOS first path → pair = NLOS+NLOS
+los_nlos_count = int(np.sum(y_p1_class == 0))
+nlos_nlos_count = int(np.sum(y_p1_class == 1))
 total = len(y_p1_class)
 
 fig, ax = plt.subplots(figsize=(7, 5))
@@ -320,38 +496,64 @@ ax.set_title(
 ax.grid(axis="y", alpha=0.3)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / "two_path_pair_distribution.png", dpi=300, bbox_inches="tight")
-print(f"  ✓ Saved: two_path_pair_distribution.png")
 plt.close()
+print("  Saved: two_path_pair_distribution.png")
 
-# =============================================================================
-# STEP 5: SAVE MODELS AND RESULTS
-# =============================================================================
-print()
-print("Step 5: Saving models and results...")
 
-joblib.dump(rf_p1, OUTPUT_DIR / "rf_range_path1.pkl")
-joblib.dump(rf_p2, OUTPUT_DIR / "rf_range_path2.pkl")
-np.save(OUTPUT_DIR / "y_p1_pred.npy", y_p1_pred)
-np.save(OUTPUT_DIR / "y_p2_pred.npy", y_p2_pred)
+# -----------------------------------------------------------------------------
+# STEP 4: SAVE MODELS, PREDICTIONS, AND REPORT
+# -----------------------------------------------------------------------------
+print("\nStep 4: Saving models and results...")
 
-with open(OUTPUT_DIR / "regression_results.txt", "w") as f:
+for spec in model_specs:
+    key = spec["key"]
+
+    p1_obj = results[(key, "p1")]
+    p2_obj = results[(key, "p2")]
+
+    model_p1_path = OUTPUT_DIR / f"{key}_range_path1.pkl"
+    model_p2_path = OUTPUT_DIR / f"{key}_range_path2.pkl"
+    pred_p1_path = OUTPUT_DIR / f"y_p1_pred_{key}.npy"
+    pred_p2_path = OUTPUT_DIR / f"y_p2_pred_{key}.npy"
+
+    joblib.dump(p1_obj["model"], model_p1_path)
+    joblib.dump(p2_obj["model"], model_p2_path)
+    np.save(pred_p1_path, p1_obj["y_pred"])
+    np.save(pred_p2_path, p2_obj["y_pred"])
+
+    print(f"  Saved: {model_p1_path.name}, {model_p2_path.name}")
+    print(f"  Saved: {pred_p1_path.name}, {pred_p2_path.name}")
+
+# Legacy compatibility with previous downstream consumers
+if ("rf", "p1") in results and ("rf", "p2") in results:
+    np.save(OUTPUT_DIR / "y_p1_pred.npy", results[("rf", "p1")]["y_pred"])
+    np.save(OUTPUT_DIR / "y_p2_pred.npy", results[("rf", "p2")]["y_pred"])
+    print("  Saved: y_p1_pred.npy, y_p2_pred.npy (RF legacy compatibility)")
+
+report_path = OUTPUT_DIR / "regression_results.txt"
+with open(report_path, "w") as f:
     f.write("RANGE ESTIMATION RESULTS\n")
     f.write("=" * 60 + "\n\n")
     f.write(f"Training samples : {len(X_train):,}\n")
     f.write(f"Test samples     : {len(X_test):,}\n")
-    f.write(f"Features         : {X_train.shape[1]}\n\n")
+    f.write(f"Features         : {X_train.shape[1]}\n")
+    f.write(f"Models trained   : {', '.join(results_df['model'].unique())}\n\n")
 
-    f.write("PATH 1 RANGE ESTIMATOR:\n")
-    f.write(f"  RMSE : {p1_rmse:.4f} m\n")
-    f.write(f"  MAE  : {p1_mae:.4f} m\n")
-    f.write(f"  R²   : {p1_r2:.4f}\n\n")
+    for path_name in ["Path 1", "Path 2"]:
+        f.write(f"{path_name.upper()} PERFORMANCE\n")
+        path_rows = results_df[results_df["path"] == path_name].sort_values("rmse")
+        for _, row in path_rows.iterrows():
+            f.write(
+                f"  {row['model']:<13} RMSE={row['rmse']:.4f} m  MAE={row['mae']:.4f} m  "
+                f"R2={row['r2']:.4f}  Train={row['train_seconds']:.2f}s\n"
+            )
+        best = best_by_path[path_name]
+        f.write(
+            f"  BEST ({path_name})  : {best['model']}  "
+            f"(RMSE={best['rmse']:.4f} m, MAE={best['mae']:.4f} m, R2={best['r2']:.4f})\n\n"
+        )
 
-    f.write("PATH 2 RANGE ESTIMATOR:\n")
-    f.write(f"  RMSE : {p2_rmse:.4f} m\n")
-    f.write(f"  MAE  : {p2_mae:.4f} m\n")
-    f.write(f"  R²   : {p2_r2:.4f}\n\n")
-
-    f.write("TWO-PATH PAIR CLASSIFICATION:\n")
+    f.write("TWO-PATH PAIR CLASSIFICATION\n")
     f.write(
         f"  LOS + NLOS  pairs : {los_nlos_count:,} ({los_nlos_count / total * 100:.1f}%)\n"
     )
@@ -359,31 +561,37 @@ with open(OUTPUT_DIR / "regression_results.txt", "w") as f:
         f"  NLOS + NLOS pairs : {nlos_nlos_count:,} ({nlos_nlos_count / total * 100:.1f}%)\n\n"
     )
 
-    f.write("NOTE: Path 2 is always classified as NLOS per project brief.\n")
-    f.write("      Range for Path 2 is estimated from second CIR peak offset.\n")
+    f.write("NOTES\n")
+    f.write("  - Path 2 class is fixed to NLOS per project brief.\n")
+    f.write("  - Path 2 target range is derived from second CIR peak offset.\n")
+    f.write("  - KNN uses scaled features; RF and XGBoost use raw features.\n")
 
-print(f"  ✓ rf_range_path1.pkl")
-print(f"  ✓ rf_range_path2.pkl")
-print(f"  ✓ regression_results.txt")
-print()
+print(f"  Saved: {report_path.name}")
 
-# =============================================================================
+
+# -----------------------------------------------------------------------------
 # SUMMARY
-# =============================================================================
+# -----------------------------------------------------------------------------
+print()
 print("=" * 80)
-print("RANGE ESTIMATION COMPLETE!")
+print("RANGE ESTIMATION COMPLETE")
 print("=" * 80)
-print()
-print("📊 RESULTS SUMMARY:")
-print(f"   Path 1 — RMSE: {p1_rmse:.4f}m  |  MAE: {p1_mae:.4f}m  |  R²: {p1_r2:.4f}")
-print(f"   Path 2 — RMSE: {p2_rmse:.4f}m  |  MAE: {p2_mae:.4f}m  |  R²: {p2_r2:.4f}")
-print()
-print("📁 Output files in:", OUTPUT_DIR.absolute())
-print("   • range_estimation_results.png")
-print("   • regressor_feature_importance.png")
-print("   • two_path_pair_distribution.png")
-print("   • rf_range_path1.pkl / rf_range_path2.pkl")
-print("   • regression_results.txt")
-print()
-print("▶  NEXT: Run eda_focused.py to visualise second-path peak detections")
+
+print("\nBest model by path (lowest RMSE):")
+for path_name in ["Path 1", "Path 2"]:
+    best = best_by_path[path_name]
+    print(
+        f"  {path_name}: {best['model']}  "
+        f"RMSE={best['rmse']:.4f}m  MAE={best['mae']:.4f}m  R2={best['r2']:.4f}"
+    )
+
+print("\nOutput files in:", OUTPUT_DIR.absolute())
+print("  - regression_model_comparison.csv")
+print("  - range_estimation_results.png")
+print("  - regression_metrics_comparison.png")
+print("  - regressor_feature_importance.png (tree models only)")
+print("  - two_path_pair_distribution.png")
+print("  - regression_results.txt")
+print("  - *_range_path1.pkl / *_range_path2.pkl")
+print("  - y_p1_pred_*.npy / y_p2_pred_*.npy")
 print("=" * 80)

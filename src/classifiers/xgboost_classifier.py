@@ -75,18 +75,22 @@ with open(DATA_DIR / "feature_names.txt", "r") as f:
     lines = f.readlines()
 
 feature_names = []
-reading_features = False
+reading_section = None
 for line in lines:
     if "Core Features" in line:
-        reading_features = True
+        reading_section = "core"
         continue
-    if reading_features and line.strip().startswith(tuple("0123456789")):
-        feat_name = line.split(".")[-1].strip()
-        feature_names.append(feat_name)
     if "CIR Features" in line:
         for i in range(730, 850):
             feature_names.append(f"CIR{i}")
-        break
+        reading_section = "cir"
+        continue
+    if "Engineered Features" in line:
+        reading_section = "engineered"
+        continue
+    if reading_section in ("core", "engineered") and line.strip().startswith(tuple("0123456789")):
+        feat_name = line.split(".")[-1].strip()
+        feature_names.append(feat_name)
 
 print(f"Training set   : {X_train.shape}")
 print(f"Validation set : {X_val.shape}")

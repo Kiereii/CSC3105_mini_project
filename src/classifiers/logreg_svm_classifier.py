@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore")
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RUN_NAME = os.getenv("RUN_NAME", "split_env_70_15_15_seed42")
 DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
 OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "logreg_svm"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -81,7 +81,9 @@ for line in lines:
     if "Engineered Features" in line:
         reading_section = "engineered"
         continue
-    if reading_section in ("core", "engineered") and line.strip().startswith(tuple("0123456789")):
+    if reading_section in ("core", "engineered") and line.strip().startswith(
+        tuple("0123456789")
+    ):
         feat_name = line.split(".")[-1].strip()
         feature_names.append(feat_name)
 

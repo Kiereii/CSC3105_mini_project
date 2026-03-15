@@ -30,7 +30,7 @@ warnings.filterwarnings("ignore")
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 DATA_DIR = Path("./Dataset/UWB-LOS-NLOS-Data-Set/dataset/Cleaned")
-RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RUN_NAME = os.getenv("RUN_NAME", "split_env_70_15_15_seed42")
 OUTPUT_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -51,7 +51,6 @@ def main() -> None:
     parser.add_argument("--test-size", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--run-name", type=str, default=None)
-    parser.add_argument("--skip-xgboost-tuning", action="store_true")
     parser.add_argument(
         "--only",
         type=str,

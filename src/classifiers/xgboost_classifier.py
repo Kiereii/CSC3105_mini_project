@@ -117,7 +117,7 @@ print(
 print()
 
 if RUN_TUNING:
-    cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    cv_strategy = StratifiedKFold(n_splits=3, shuffle=True, random_state=RANDOM_SEED)
 
     optuna_module = None
     if TUNING_METHOD == "bayes":
@@ -181,7 +181,9 @@ if RUN_TUNING:
         if optuna_module is None:
             raise RuntimeError("Optuna not available for Bayesian optimization")
 
-        print(f"Running Bayesian optimization ({BAYES_TRIALS} trials, 5-fold CV)...")
+        print(
+            f"Running Bayesian optimization ({BAYES_TRIALS} trials, {cv_strategy.n_splits}-fold CV)..."
+        )
         print()
 
         sampler = optuna_module.samplers.TPESampler(seed=RANDOM_SEED)
@@ -555,12 +557,7 @@ with open(OUTPUT_DIR / "error_analysis_xgb.txt", "w") as f:
 print("✓ Saved: error_analysis_xgb.txt")
 print()
 
-# ==============================================================================
 # STEP 7: FEATURE IMPORTANCE ANALYSIS
-# ==============================================================================
-print("\nStep 7: Analyzing feature importance...")
-print("=" * 80)
-
 # XGBoost provides 3 importance types - we use 'gain' (most informative)
 # gain   = average gain of the feature when it is used in trees
 # weight = number of times the feature appears in trees

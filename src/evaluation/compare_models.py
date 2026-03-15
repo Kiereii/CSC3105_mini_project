@@ -37,7 +37,7 @@ warnings.filterwarnings("ignore")
 
 plt.style.use("seaborn-v0_8-darkgrid")
 
-RUN_NAME = os.getenv("RUN_NAME", "split_80_20_seed42")
+RUN_NAME = os.getenv("RUN_NAME", "split_env_70_15_15_seed42")
 RUN_ROOT = Path("./runs") / RUN_NAME
 PREP_DIR = RUN_ROOT / "preprocessed_data"
 MODELS_DIR = RUN_ROOT / "models"

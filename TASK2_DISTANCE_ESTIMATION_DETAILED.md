@@ -819,7 +819,7 @@ param_grid = {
 
 **Proposed Architectures**:
 1. **Neural Networks**: Deep learning for CIR waveform processing
-2. **CNN for CIR**: Convolutional layers for spatial patterns in CIR
+2. **Temporal convolution for CIR**: Convolutional layers for local patterns in CIR
 3. **Attention Mechanisms**: Learn which CIR samples are most relevant
 4. **Multi-Task Learning**: Jointly learn Path 1 and Path 2 representation
 

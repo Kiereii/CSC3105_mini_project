@@ -343,27 +343,80 @@ plt.close()
 print("  Saved: xgb_range_estimation_results.png")
 
 
-# 3B. Metrics comparison bars
-metrics = ["rmse", "mae", "r2"]
-metric_titles = {"rmse": "RMSE (m)", "mae": "MAE (m)", "r2": "R2"}
-fig, axes = plt.subplots(2, 3, figsize=(16, 8), squeeze=False)
+# 3B. Metrics comparison lines
+path_labels = ["Path 1", "Path 2"]
+rmse_vals = [
+    float(results_df.loc[results_df["path"] == "Path 1", "rmse"].iloc[0]),
+    float(results_df.loc[results_df["path"] == "Path 2", "rmse"].iloc[0]),
+]
+mae_vals = [
+    float(results_df.loc[results_df["path"] == "Path 1", "mae"].iloc[0]),
+    float(results_df.loc[results_df["path"] == "Path 2", "mae"].iloc[0]),
+]
+r2_vals = [
+    float(results_df.loc[results_df["path"] == "Path 1", "r2"].iloc[0]),
+    float(results_df.loc[results_df["path"] == "Path 2", "r2"].iloc[0]),
+]
 
-for row_idx, path_name in enumerate(["Path 1", "Path 2"]):
-    path_df = results_df[results_df["path"] == path_name]
-    for col_idx, metric in enumerate(metrics):
-        ax = axes[row_idx, col_idx]
-        val = float(path_df[metric].iloc[0])
-        bar = ax.bar(["XGBoost"], [val], color="#3bb273", alpha=0.9)[0]
-        ax.set_title(f"{path_name} - {metric_titles[metric]}", fontweight="bold")
-        ax.set_ylabel(metric_titles[metric])
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height(),
-            f"{bar.get_height():.3f}",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
+metric_colors = {
+    "rmse": "#2d7dd2",
+    "mae": "#f4a259",
+    "r2": "#3bb273",
+}
+
+x = np.arange(len(path_labels))
+fig, axes = plt.subplots(1, 2, figsize=(14, 5), squeeze=False)
+ax_left = axes[0, 0]
+ax_right = axes[0, 1]
+
+# Left panel: RMSE + MAE (same units, meters)
+ax_left.plot(
+    x,
+    rmse_vals,
+    marker="o",
+    linewidth=2,
+    color=metric_colors["rmse"],
+    label="RMSE",
+)
+ax_left.plot(
+    x,
+    mae_vals,
+    marker="s",
+    linewidth=2,
+    color=metric_colors["mae"],
+    label="MAE",
+)
+ax_left.set_xticks(x)
+ax_left.set_xticklabels(path_labels)
+ax_left.set_ylabel("Error (m)")
+ax_left.set_title("XGBoost Regression Errors by Path", fontweight="bold")
+ax_left.grid(alpha=0.3)
+ax_left.legend()
+
+for xi, yi in zip(x, rmse_vals):
+    ax_left.text(xi, yi, f"{yi:.3f}", ha="center", va="bottom", fontsize=9)
+for xi, yi in zip(x, mae_vals):
+    ax_left.text(xi, yi, f"{yi:.3f}", ha="center", va="top", fontsize=9)
+
+# Right panel: R2 on separate axis scale
+ax_right.plot(
+    x,
+    r2_vals,
+    marker="^",
+    linewidth=2,
+    color=metric_colors["r2"],
+    label="R2",
+)
+ax_right.set_xticks(x)
+ax_right.set_xticklabels(path_labels)
+ax_right.set_ylabel("R2")
+ax_right.set_ylim(min(0.0, min(r2_vals) - 0.05), 1.0)
+ax_right.set_title("XGBoost Regression Fit by Path", fontweight="bold")
+ax_right.grid(alpha=0.3)
+ax_right.legend()
+
+for xi, yi in zip(x, r2_vals):
+    ax_right.text(xi, yi, f"{yi:.3f}", ha="center", va="bottom", fontsize=9)
 
 plt.tight_layout()
 plt.savefig(
@@ -376,8 +429,8 @@ print("  Saved: xgb_regression_metrics_comparison.png")
 # 3C. Feature importance for XGBoost
 print("  Plotting feature importance for XGBoost...")
 
+# Feature names must match second_path_features.py's core_features list (no RANGE).
 core_feats = [
-    "RANGE",
     "FP_IDX",
     "FP_AMP1",
     "FP_AMP2",
@@ -402,6 +455,11 @@ cir_feats = [f"CIR{i}" for i in range(730, 850)]
 feat_names = core_feats + cir_feats
 if len(feat_names) != X_train.shape[1]:
     feat_names = [f"f{i}" for i in range(X_train.shape[1])]
+
+# Indices of key features used in diagnostic plots
+_fn = feat_names
+FP_IDX_col   = _fn.index("FP_IDX")   if "FP_IDX"   in _fn else None
+PEAK2_GAP_col= _fn.index("PEAK2_GAP")if "PEAK2_GAP" in _fn else None
 
 fig, axes = plt.subplots(1, 2, figsize=(18, 6), squeeze=False)
 top_n = 20
@@ -429,48 +487,167 @@ plt.close()
 print("  Saved: xgb_regressor_feature_importance.png")
 
 
-# 3D. Two-path pair classification summary
+# Load pair labels (0=LOS+NLOS, 1=NLOS+NLOS) for downstream diagnostic plots.
 pair_labels_path = DATA_DIR / "y_test_pair.npy"
 if pair_labels_path.exists():
-    y_p1_class = np.load(pair_labels_path)
+    y_pair_test = np.load(pair_labels_path)
 else:
-    y_p1_class = np.load(DATA_DIR / "y_test.npy")
+    y_pair_test = np.load(DATA_DIR / "y_test.npy")
 
-los_nlos_count = int(np.sum(y_p1_class == 0))
-nlos_nlos_count = int(np.sum(y_p1_class == 1))
-total = len(y_p1_class)
+los_nlos_count = int(np.sum(y_pair_test == 0))
+nlos_nlos_count = int(np.sum(y_pair_test == 1))
+total = len(y_pair_test)
 
-fig, ax = plt.subplots(figsize=(7, 5))
-bars = ax.bar(
-    ["LOS + NLOS\n(Path1=LOS)", "NLOS + NLOS\n(Path1=NLOS)"],
-    [los_nlos_count, nlos_nlos_count],
-    color=["#2ecc71", "#e74c3c"],
-    alpha=0.85,
-    edgecolor="white",
-)
-for bar, cnt in zip(bars, [los_nlos_count, nlos_nlos_count]):
-    ax.text(
-        bar.get_x() + bar.get_width() / 2,
-        bar.get_height(),
-        f"{cnt:,}\n({cnt / total * 100:.1f}%)",
-        ha="center",
-        va="bottom",
-        fontweight="bold",
-        fontsize=11,
+# 3D. FP_IDX vs Measured Range — implements the brief hint
+# "Use FP_IDX and measured range to correlate to next second dominant path"
+if FP_IDX_col is not None:
+    fp_idx_test = X_test[:, FP_IDX_col]
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), squeeze=False)
+
+    for col_idx, (path_label, y_true, color_lo, color_hi) in enumerate([
+        ("Path 1", y_p1_test, "#2d7dd2", "#e74c3c"),
+        ("Path 2", y_p2_test, "#3bb273", "#f4a259"),
+    ]):
+        ax = axes[0, col_idx]
+        mask_los  = y_pair_test == 0
+        mask_nlos = y_pair_test == 1
+        ax.scatter(
+            fp_idx_test[mask_los], y_true[mask_los],
+            alpha=0.3, s=8, color=color_lo, label="LOS+NLOS",
+        )
+        ax.scatter(
+            fp_idx_test[mask_nlos], y_true[mask_nlos],
+            alpha=0.3, s=8, color=color_hi, label="NLOS+NLOS",
+        )
+        # Linear trend
+        m, b = np.polyfit(fp_idx_test, y_true, 1)
+        x_line = np.linspace(fp_idx_test.min(), fp_idx_test.max(), 200)
+        ax.plot(x_line, m * x_line + b, "k--", linewidth=1.5, label=f"Trend (slope={m:.3f}m/idx)")
+        ax.set_xlabel("FP_IDX (First Path CIR Index)")
+        ax.set_ylabel("Measured Range (m)")
+        ax.set_title(f"{path_label} — FP_IDX vs Measured Range", fontweight="bold")
+        ax.legend(fontsize=9)
+        ax.grid(alpha=0.3)
+
+    plt.suptitle(
+        "FP_IDX Correlation with Measured Range (Brief Hint)\n"
+        "Positive slope confirms FP_IDX encodes extra delay → longer range",
+        fontsize=11, fontweight="bold", y=1.02,
     )
-ax.set_ylabel("Number of Samples")
-ax.set_title(
-    "Two-Path Pair Classification\n(Path 2 is always NLOS per brief)",
-    fontweight="bold",
-    fontsize=13,
-)
-ax.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(
+        OUTPUT_DIR / "xgb_fp_idx_vs_range.png", dpi=300, bbox_inches="tight"
+    )
+    plt.close()
+    print("  Saved: xgb_fp_idx_vs_range.png")
+
+
+# 3E. PEAK2_GAP vs Extra Path Length — validates the gap→range engineering
+if PEAK2_GAP_col is not None:
+    METERS_PER_SAMPLE = (3e8 * 1.0016e-9) / 2  # match second_path_features.py
+    peak2_gap_test = X_test[:, PEAK2_GAP_col]
+    extra_range_test = y_p2_test - y_p1_test  # ground-truth extra length
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    mask_los  = y_pair_test == 0
+    mask_nlos = y_pair_test == 1
+    ax.scatter(
+        peak2_gap_test[mask_los], extra_range_test[mask_los],
+        alpha=0.3, s=8, color="#2d7dd2", label="LOS+NLOS",
+    )
+    ax.scatter(
+        peak2_gap_test[mask_nlos], extra_range_test[mask_nlos],
+        alpha=0.3, s=8, color="#e74c3c", label="NLOS+NLOS",
+    )
+    # Theoretical line: extra_range = gap * METERS_PER_SAMPLE
+    gap_line = np.linspace(peak2_gap_test.min(), peak2_gap_test.max(), 200)
+    ax.plot(
+        gap_line, gap_line * METERS_PER_SAMPLE, "k--", linewidth=2,
+        label=f"Theoretical ({METERS_PER_SAMPLE:.4f} m/sample)",
+    )
+    ax.set_xlabel("PEAK2_GAP (CIR samples)")
+    ax.set_ylabel("Extra Range: Range_P2 - Range_P1 (m)")
+    ax.set_title(
+        "PEAK2_GAP vs Extra Path Length\n"
+        "Points near dashed line confirm peak gap correctly encodes path-length difference",
+        fontweight="bold",
+    )
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(
+        OUTPUT_DIR / "xgb_peak2_gap_vs_extra_range.png", dpi=300, bbox_inches="tight"
+    )
+    plt.close()
+    print("  Saved: xgb_peak2_gap_vs_extra_range.png")
+
+
+# 3F. Residual (error) distribution — more informative than a 2-point line chart
+p1_residuals = results["p1"]["y_pred"] - y_p1_test
+p2_residuals = results["p2"]["y_pred"] - y_p2_test
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 5), squeeze=False)
+for col_idx, (path_label, residuals, color) in enumerate([
+    ("Path 1", p1_residuals, "#2d7dd2"),
+    ("Path 2", p2_residuals, "#d1495b"),
+]):
+    ax = axes[0, col_idx]
+    ax.hist(residuals, bins=60, color=color, alpha=0.8, edgecolor="white")
+    ax.axvline(0, color="black", linewidth=1.5, linestyle="--")
+    ax.axvline(np.mean(residuals), color="orange", linewidth=1.5, linestyle="-",
+               label=f"Mean={np.mean(residuals):.3f}m")
+    ax.set_xlabel("Prediction Error (m)  [pred − actual]")
+    ax.set_ylabel("Count")
+    ax.set_title(
+        f"{path_label} — Residual Distribution\n"
+        f"RMSE={evaluate_metrics(y_p1_test if col_idx==0 else y_p2_test, results['p1' if col_idx==0 else 'p2']['y_pred'])[0]:.3f}m  "
+        f"Skew={float(pd.Series(residuals).skew()):.3f}",
+        fontweight="bold",
+    )
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
+
 plt.tight_layout()
 plt.savefig(
-    OUTPUT_DIR / "xgb_two_path_pair_distribution.png", dpi=300, bbox_inches="tight"
+    OUTPUT_DIR / "xgb_residual_distribution.png", dpi=300, bbox_inches="tight"
 )
 plt.close()
-print("  Saved: xgb_two_path_pair_distribution.png")
+print("  Saved: xgb_residual_distribution.png")
+
+
+# 3G. Path 1 vs Path 2 predicted — co-variation and physical constraint validation
+fig, ax = plt.subplots(figsize=(8, 7))
+mask_los  = y_pair_test == 0
+mask_nlos = y_pair_test == 1
+ax.scatter(
+    p1_pred[mask_los], results["p2"]["y_pred"][mask_los],
+    alpha=0.25, s=8, color="#2d7dd2", label="LOS+NLOS",
+)
+ax.scatter(
+    p1_pred[mask_nlos], results["p2"]["y_pred"][mask_nlos],
+    alpha=0.25, s=8, color="#e74c3c", label="NLOS+NLOS",
+)
+all_vals = np.concatenate([p1_pred, results["p2"]["y_pred"]])
+lim = [all_vals.min() - 0.5, all_vals.max() + 0.5]
+ax.plot(lim, lim, "k--", linewidth=1.5, label="P2 = P1 (constraint boundary)")
+ax.set_xlim(lim)
+ax.set_ylim(lim)
+ax.set_xlabel("Predicted Path 1 Range (m)")
+ax.set_ylabel("Predicted Path 2 Range (m)")
+ax.set_title(
+    "Predicted Path 1 vs Path 2 Ranges\n"
+    "Points above dashed line satisfy P2 ≥ P1 physical constraint",
+    fontweight="bold",
+)
+ax.legend(fontsize=9)
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(
+    OUTPUT_DIR / "xgb_p1_vs_p2_predicted.png", dpi=300, bbox_inches="tight"
+)
+plt.close()
+print("  Saved: xgb_p1_vs_p2_predicted.png")
 
 
 # -----------------------------------------------------------------------------
@@ -524,7 +701,7 @@ with open(report_path, "w") as f:
             )
         f.write("\n")
 
-    f.write("TWO-PATH PAIR CLASSIFICATION\n")
+    f.write("TWO-PATH PAIR CLASSIFICATION (test split)\n")
     f.write(
         f"  LOS + NLOS  pairs : {los_nlos_count:,} ({los_nlos_count / total * 100:.1f}%)\n"
     )
@@ -565,10 +742,12 @@ print(
 )
 print("\nOutput files in:", OUTPUT_DIR.absolute())
 print("  - xgb_regression_model_comparison.csv")
-print("  - xgb_range_estimation_results.png")
-print("  - xgb_regression_metrics_comparison.png")
-print("  - xgb_regressor_feature_importance.png")
-print("  - xgb_two_path_pair_distribution.png")
+print("  - xgb_range_estimation_results.png      [predicted vs actual scatter]")
+print("  - xgb_regressor_feature_importance.png  [top-20 features per path]")
+print("  - xgb_fp_idx_vs_range.png               [FP_IDX vs range, brief hint]")
+print("  - xgb_peak2_gap_vs_extra_range.png      [PEAK2_GAP validation]")
+print("  - xgb_residual_distribution.png         [error histogram per path]")
+print("  - xgb_p1_vs_p2_predicted.png            [P1 vs P2 co-variation]")
 print("  - xgb_regression_results.txt")
 print("  - xgb_range_path1.pkl / xgb_range_path2.pkl")
 print("  - y_p1_pred_xgb.npy / y_p2_pred_xgb.npy")

@@ -24,7 +24,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-### If skipping CNN (no TensorFlow needed)
+### Minimal install (without TensorFlow)
 ```bash
 python -m pip install --upgrade pip
 python -m pip install pandas numpy matplotlib scikit-learn seaborn scipy joblib xgboost
@@ -99,4 +99,4 @@ This prevents 70/30 and 80/20 artifacts from overwriting each other.
 
 - If you use `--only`, make sure prerequisite files already exist in the same `--run-name` folder.
 - `compare` expects model outputs inside that same run folder.
-- CNN is optional in comparison and is ignored if CNN files are missing.
+- `compare` includes available model outputs from the same run folder.

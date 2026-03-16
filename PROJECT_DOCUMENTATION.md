@@ -897,7 +897,7 @@ This project successfully implements a comprehensive 3D Data Analytics pipeline 
 
 ### Future Work
 
-- **Deep Learning Integration**: Explore CNN/LSTM architectures for CIR waveform processing
+- **Deep Learning Integration**: Explore sequence-model architectures for CIR waveform processing
 - **Real-time Implementation**: Optimize models for embedded UWB device deployment
 - **Environmental Generalization**: Test on unseen environments to validate robustness
 - **Uncertainty Quantification**: Implement Bayesian approaches for confidence estimation

@@ -20,7 +20,6 @@ The following classifiers were evaluated on the single-path LOS/NLOS task (Path 
 | **SVM (RBF kernel)** | `logreg_svm_classifier.py` | Non-linear boundary; requires scaled input |
 | **Random Forest** | `random_forest_classifier.py` | Ensemble of decision trees; handles raw features |
 | **XGBoost** | `xgboost_classifier.py` | Gradient-boosted trees; Optuna-tuned hyperparameters |
-| **1D CNN (Hybrid)** | `cnn_classifier.py` | CIR branch (Conv1D) + core feature branch (Dense); TensorFlow/Keras |
 
 For the **pair-level** task (LOS+NLOS vs NLOS+NLOS, from `XG_pair_classifier.py`), only XGBoost was used after the single-path comparison identified it as the best performer.
 
@@ -37,25 +36,6 @@ All three regression models are implemented in `range_regressor.py` and are eval
 | **XGBoost Regressor** | `n_estimators=300`, `max_depth=6`, `learning_rate=0.05`, `objective="reg:squarederror"` | Raw (unscaled) features |
 
 > **Note on KNN scaling:** KNN is distance-based, so feature magnitudes directly affect its predictions. Standard scaling (zero mean, unit variance) is applied only for KNN. Random Forest and XGBoost use raw features, as they are invariant to monotonic feature transformations.
-
----
-
-### Why CNN Was Not Kept in the Final Comparison
-
-The 1D CNN was developed and evaluated during the exploration phase as a hypothesis: convolutional filters on the raw CIR waveform (samples 730–849) could detect waveform *shape* differences (sharp LOS first-path peak vs. smeared NLOS peak) that tabular models cannot. This was implemented as a **hybrid architecture** with two input branches:
-
-- **CIR branch** — `Conv1D(32, k=5) → MaxPool → Conv1D(64, k=3) → MaxPool → Conv1D(64, k=3) → GlobalAvgPool → Dense(64) → Dropout(0.3)`
-- **Core feature branch** — `Dense(32) → BatchNorm → Dense(32)`
-- **Merged** — `Concatenate → Dense(64) → Dropout(0.4) → Sigmoid`
-
-Despite this principled design, the CNN was excluded from the final comparison for the following reasons:
-
-1. **Comparable, not superior, accuracy.** When benchmarked against XGBoost on the same test set, the CNN did not yield a meaningfully higher F1 or AUC score to justify its additional complexity.
-2. **Training instability and cost.** The Keras model requires TensorFlow, GPU memory management, EarlyStopping and ReduceLROnPlateau callbacks, and is sensitive to learning rate scheduling. Training time is substantially higher.
-3. **No feature interpretability.** XGBoost exposes per-feature gain importances, and we explicitly use these to understand which signal characteristics (e.g., `PEAK2_GAP`, `FP_AMP` ratios) drive predictions. The CNN has no equivalent mechanism, which undermines the analytical value of the model for a report.
-4. **Project scope alignment.** The brief emphasises the *3D process* (data flow, feature engineering, split strategy, evaluation) over raw accuracy. XGBoost fully satisfies this emphasis while remaining reproducible and auditable.
-
-The CNN file is retained in `src/classifiers/cnn_classifier.py` as a demonstrated extension of the team's competency with deep learning approaches.
 
 ---
 
@@ -118,7 +98,7 @@ The validation set serves two distinct purposes:
 
 1. **Implicit tuning signal in Optuna.** The `XG_pair_classifier.py` uses `StratifiedKFold(n_splits=3)` cross-validation *inside the training set* during Optuna trials. The validation set is kept completely separate during this search to prevent tuning leakage into the evaluation split.
 
-2. **Early stopping signal for the CNN.** In `cnn_classifier.py`, `validation_split=0.15` is passed to `model.fit()`, and `EarlyStopping(monitor="val_loss", patience=10)` halts training when validation loss stops improving. This prevents overfitting to the training set epochs.
+2. **Threshold/curve diagnostics for classifier calibration.** Validation outputs are used to inspect threshold sensitivity and overfitting behaviour (e.g., validation curves and threshold sweeps) before freezing the final test evaluation.
 
 ---
 
@@ -283,7 +263,7 @@ The 70/15/15 environment-grouped split is selected because it:
 | Learning paradigm | Supervised | Labelled ground truth available for both tasks |
 | Classifier | XGBoost | Best F1/AUC; Optuna-tuned; interpretable feature importance |
 | Regressor | XGBoost | Lowest RMSE across both paths; physically consistent predictions |
-| CNN excluded | Not in final model | Comparable accuracy to XGBoost; higher complexity; no interpretability |
+| Model family scope | Tree/linear models | Strong performance, interpretability, and reproducible training workflow |
 | Split ratio | 70/15/15 | Proper train/val/test separation; valid Optuna tuning setup |
 | Split method | Environment-based | Prevents data leakage from correlated same-environment measurements |
 | Tuning method | Optuna (TPE, 40 trials, 3-fold CV) | Systematic Bayesian search; F1 objective for imbalanced classes |

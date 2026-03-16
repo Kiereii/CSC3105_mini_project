@@ -72,19 +72,12 @@ y_proba = {
     "XGBoost": np.load(MODELS_DIR / "xgboost" / "y_pred_proba_xgb.npy"),
 }
 
-cnn_pred_path = MODELS_DIR / "cnn" / "y_pred_cnn.npy"
-cnn_proba_path = MODELS_DIR / "cnn" / "y_pred_proba_cnn.npy"
-if cnn_pred_path.exists() and cnn_proba_path.exists():
-    y_pred["1D CNN"] = np.load(cnn_pred_path)
-    y_proba["1D CNN"] = np.load(cnn_proba_path)
-
 # Model display colours (consistent across all plots)
 COLORS = {
     "Random Forest": "#2ecc71",
     "Logistic Regression": "#e74c3c",
     "SVM (LinearSVC)": "#9b59b6",
     "XGBoost": "#f39c12",
-    "1D CNN": "#1a5276",
 }
 
 print("✓ All model outputs loaded")
@@ -239,7 +232,7 @@ for idx, model_name in enumerate(model_names):
         style="italic",
     )
 
-# Hide the unused 6th subplot (5 models in a 2x3 grid)
+# Hide unused subplots (4 models in a 2x3 grid)
 for idx in range(len(model_names), len(axes_flat)):
     axes_flat[idx].set_visible(False)
 

@@ -7,23 +7,27 @@ import sys
 STEP_SCRIPTS = {
     "preprocess": "src/preprocessing/preprocess_data.py",
     "second_path": "src/preprocessing/second_path_features.py",
+    "dt_exploratory": "src/classifiers/dt_exploratory.py",
     "random_forest": "src/classifiers/random_forest_classifier.py",
     "logreg_svm": "src/classifiers/logreg_svm_classifier.py",
     "xgboost": "src/classifiers/xgboost_classifier.py",
-    "pair_classifier": "src/classifiers/pair_classifier.py",
-    "range_regressor": "src/regression/range_regressor.py",
     "compare": "src/evaluation/compare_models.py",
+    "pair_classifier": "src/classifiers/XG_pair_classifier.py",
+    "range_regressor": "src/regression/range_regressor.py",
+    "xgb_range_regressor": "src/regression/xgb_range_regressor.py",
 }
 
 DEFAULT_STEP_ORDER = [
     "preprocess",
     "second_path",
+    "dt_exploratory",
     "random_forest",
     "logreg_svm",
     "xgboost",
+    "compare",
     "pair_classifier",
     "range_regressor",
-    "compare",
+    "xgb_range_regressor",
 ]
 
 
@@ -89,9 +93,6 @@ def main() -> None:
     env["TEST_SIZE"] = str(args.test_size)
     env["RANDOM_SEED"] = str(args.seed)
     env["RUN_NAME"] = run_name
-
-    if args.skip_xgboost_tuning:
-        env["RUN_TUNING"] = "0"
 
     only_steps = parse_step_list(args.only) if args.only else set()
     skip_steps = parse_step_list(args.skip) if args.skip else set()

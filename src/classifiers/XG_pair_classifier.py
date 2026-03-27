@@ -1,18 +1,7 @@
 """
 UWB LOS/NLOS - Pair-Level XGBoost Classifier
-
-Objective:
-  Recognize whether the two shortest dominant paths in one CIR measurement are:
-    0 -> LOS+NLOS
-    1 -> NLOS+NLOS
-
-This script is intentionally XGBoost-only to match the selected report model.
-
-Run AFTER:
-  preprocess_data.py -> second_path_features.py
-
-Outputs:
-  runs/<RUN_NAME>/models/pair_classifier/
+0 -> LOS+NLOS
+1 -> NLOS+NLOS
 """
 
 import os
@@ -20,7 +9,6 @@ import time
 import warnings
 import importlib
 from pathlib import Path
-
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,9 +33,6 @@ warnings.filterwarnings("ignore")
 plt.style.use("seaborn-v0_8-darkgrid")
 
 
-# ==============================================================================
-# CONFIGURATION
-# ==============================================================================
 RUN_NAME = os.getenv("RUN_NAME", "split_env_70_15_15_seed42")
 DATA_DIR = Path("./runs") / RUN_NAME / "preprocessed_data"
 OUTPUT_DIR = Path("./runs") / RUN_NAME / "models" / "pair_classifier"
@@ -230,9 +215,7 @@ if RUN_TUNING:
         optuna_module = None
 
     if optuna_module is None:
-        print("Optuna is not installed. Using base parameters without tuning.")
-        print("Tip: pip install optuna")
-        print()
+        print("Optuna is not installed. Using base parameters instead.")
     else:
         tuning_used = True
         cv_strategy = StratifiedKFold(

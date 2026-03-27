@@ -26,3 +26,8 @@ __pycache__/
 # Temp files
 *~
 .DS_Store
+
+# Local reference/notes docs (kept locally, not tracked in git)
+SUPERVISED_VS_UNSUPERVISED_JUSTIFICATION.md
+TASK2_DISTANCE_ESTIMATION_DETAILED.md
+XGBOOST_TUNING_CHEATSHEET.md

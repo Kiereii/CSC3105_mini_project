@@ -1,0 +1,71 @@
+PAIR-LEVEL CLASSIFIER RESULTS (XGBOOST ONLY)
+============================================================
+
+Task: LOS+NLOS vs NLOS+NLOS pair classification
+Model: XGBoost
+Features: 20 core+second-path + 120 CIR = 140 total
+Training samples: 29,688
+Test samples    : 5,940
+
+PAIR_LABEL definition:
+  0 = LOS+NLOS  (Path 1 LOS exists - trustworthy path available)
+  1 = NLOS+NLOS (Both paths obstructed - apply bias correction)
+
+MODEL CONFIGURATION:
+  n_estimators    : 900
+  max_depth       : 8
+  learning_rate   : 0.03742712229350613
+  min_child_weight: 7
+  gamma           : 0.8830187245517979
+  subsample       : 0.852922224968073
+  colsample_bytree: 0.823008048869822
+  reg_alpha       : 0.49395157899306263
+  reg_lambda      : 2.079801382147732
+  scale_pos_weight: 1.0275
+  random_state    : 42
+  run_tuning      : True
+  tuning_used     : True
+  pair_bayes_trials: 40
+  pair_cv_splits  : 3
+  best_cv_f1      : 0.9247
+  tuning_time_s   : 706.05
+  training_time_s : 6.52
+
+PERFORMANCE METRICS:
+  Accuracy  : 0.9323 (93.23%)
+  Precision : 0.9464
+  Recall    : 0.9147
+  F1-Score  : 0.9303
+  ROC-AUC   : 0.9832
+
+CONFUSION MATRIX:
+  True LOS+NLOS  predicted as LOS+NLOS  : 2,856
+  True LOS+NLOS  predicted as NLOS+NLOS : 152
+  True NLOS+NLOS predicted as LOS+NLOS  : 250
+  True NLOS+NLOS predicted as NLOS+NLOS : 2,682
+
+PER-PATH CLASSIFICATION (project brief requirement):
+  Path 1 (predicted by model):
+    Predicted LOS  : 3,106 (52.3%)
+    Predicted NLOS : 2,834 (47.7%)
+  Path 2 (deterministic per brief):
+    Always NLOS    : 5,940 (100.0%)
+  Rule: pair_label=0 → Path1=LOS, Path2=NLOS
+        pair_label=1 → Path1=NLOS, Path2=NLOS
+
+FEATURE IMPORTANCE BREAKDOWN:
+  2nd-path features (PEAK2_*) : 2.2%
+  CIR waveform features       : 57.7%
+  Core physical features      : 40.1%
+
+TOP 10 FEATURES (XGBOOST GAIN):
+   1. RXPACC: 0.132650
+   2. SNR_per_acc: 0.073528
+   3. FP_power: 0.044157
+   4. noise_ratio: 0.029975
+   5. CIR_PWR: 0.028247
+   6. RANGE: 0.020101
+   7. signal_to_noise: 0.019649
+   8. CIR_skewness: 0.016675
+   9. MAX_NOISE: 0.015579
+  10. STDEV_NOISE: 0.013922

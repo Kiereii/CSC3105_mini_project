@@ -1,0 +1,47 @@
+PAIR CLASSIFIER FEATURE NAMES
+==================================================
+
+Target: PAIR_LABEL
+  0 = LOS+NLOS  (Path 1 is LOS — trustworthy path exists)
+  1 = NLOS+NLOS (Both paths obstructed — no trustworthy path)
+
+Core + Second-Path Features (30):
+   1. RANGE
+   2. FP_IDX
+   3. FP_AMP1
+   4. FP_AMP2
+   5. FP_AMP3
+   6. STDEV_NOISE
+   7. CIR_PWR
+   8. MAX_NOISE
+   9. RXPACC
+  10. CH
+  11. FRAME_LEN
+  12. PREAM_LEN
+  13. BITRATE
+  14. PRFR
+  15. SNR
+  16. SNR_dB
+  17. PEAK2_IDX
+  18. PEAK2_AMP
+  19. PEAK2_GAP
+  20. PEAK2_FOUND
+  21. FP_AMP_ratio
+  22. SNR_per_acc
+  23. signal_to_noise
+  24. noise_ratio
+  25. FP_power
+  26. CIR_energy
+  27. CIR_kurtosis
+  28. CIR_skewness
+  29. CIR_rise_time
+  30. CIR_num_peaks
+
+Aligned CIR Features (120):
+  Window: 30 before FP_IDX to 90 after FP_IDX (120 samples)
+
+Total features: 150
+
+Class balance:
+  LOS+NLOS  (0): 20,997 (50.5%)
+  NLOS+NLOS (1): 20,571 (49.5%)

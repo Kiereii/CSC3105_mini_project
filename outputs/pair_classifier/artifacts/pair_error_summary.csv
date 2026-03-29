@@ -1,0 +1,2 @@
+total_test_samples,correctly_classified,misclassified,false_positives,false_negatives,boundary_low,boundary_high,near_boundary_errors,confident_errors,error_prob_mean,error_prob_median,error_prob_std
+5940,5538,402,152,250,0.4,0.6,73,181,0.4227590560913086,0.37914741039276123,0.29164376854896545

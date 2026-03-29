@@ -73,7 +73,7 @@ Dataset/UWB-LOS-NLOS-Data-Set/dataset/Cleaned/
          │                                          ┌──────────────────────────────────────┐
          │                                          │  TASK 2A — Pair Classification       │
          │                                          │                                      │
-         │                                          │  XG_pair_classifier.py  ★ WINNER     │
+         │                                          │  xgboost_pair_classifier.py  ★ WINNER│
          │                                          │  • Input : X_train/test_pair         │
          │                                          │  • Classifies: LOS+NLOS vs NLOS+NLOS │
          │                                          │  • Tuning: Optuna (40 trials, 3-fold)│
@@ -96,7 +96,7 @@ Dataset/UWB-LOS-NLOS-Data-Set/dataset/Cleaned/
                                                     │  • Trains RF + KNN + XGBoost         │
                                                     │  • Comparison baseline               │
                                                     │                                      │
-                                                    │  xgb_range_regressor.py  ★ WINNER    │
+                                                     │  xgboost_range_regressor.py  ★ WINNER│
                                                     │  • XGBoost standalone pipeline       │
                                                     │  • Predicts RANGE for Path 1 & 2     │
                                                     │  • Metrics: MAE, RMSE, R²            │
@@ -113,8 +113,8 @@ Dataset/UWB-LOS-NLOS-Data-Set/dataset/Cleaned/
 | `random_forest_classifier.py` | Core + CIR + engineered | 148 |
 | `logreg_svm_classifier.py` | Core + CIR + engineered (scaled) | 148 |
 | `xgboost_classifier.py` | Core + CIR + engineered | 148 |
-| `XG_pair_classifier.py` | Core + second-path + CIR | 140 |
-| `range_regressor.py` / `xgb_range_regressor.py` | Core + second-path + CIR | 139 |
+| `xgboost_pair_classifier.py` | Core + second-path + CIR | 140 |
+| `range_regressor.py` / `xgboost_range_regressor.py` | Core + second-path + CIR | 139 |
 
 ---
 
@@ -145,8 +145,8 @@ runs/split_env_70_15_15_seed42/
     ├── random_forest/
     ├── logreg_svm/
     ├── xgboost/          ← Task 1 winner
-    ├── pair_classifier/  ← Task 2A winner (XG_pair_classifier.py)
-    ├── range_regressor/  ← Task 2B winner (xgb_range_regressor.py)
+    ├── pair_classifier/  ← Task 2A winner (xgboost_pair_classifier.py)
+    ├── range_regressor/  ← Task 2B winner (xgboost_range_regressor.py)
     └── comparison/       ← consolidated plots + metrics CSV
 ```
 
@@ -162,8 +162,8 @@ runs/split_env_70_15_15_seed42/
 5. logreg_svm_classifier.py    (Task 1)
 6. xgboost_classifier.py       (Task 1 — winner)
 7. compare_models.py           (Task 1 evaluation)
-8. XG_pair_classifier.py       (Task 2A)
-9. xgb_range_regressor.py      (Task 2B)
+8. xgboost_pair_classifier.py  (Task 2A)
+9. xgboost_range_regressor.py  (Task 2B)
 ```
 
 > **Note:** `run_experiment.py` orchestrates steps 1–2 and 4–7 via `--only`/`--skip` flags.

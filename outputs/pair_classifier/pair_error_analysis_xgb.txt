@@ -1,0 +1,29 @@
+PAIR XGBOOST ERROR ANALYSIS REPORT
+============================================================
+
+Total test samples   : 5,940
+Correctly classified : 5,538 (93.2%)
+Misclassified        : 402 (6.8%)
+  False Positives (LOS+NLOS predicted as NLOS+NLOS) : 152
+  False Negatives (NLOS+NLOS predicted as LOS+NLOS) : 250
+
+CONFIDENCE ANALYSIS:
+  Errors near boundary (0.40-0.60): 73 (18.2%)
+  Confident errors (<= 0.20 or >= 0.80): 181 (45.0%)
+
+  Error probability stats:
+    Mean  : 0.4228
+    Median: 0.3791
+    Std   : 0.2916
+
+TOP 10 FEATURES DISTINGUISHING ERRORS:
+   1. CIR_energy       effect=131895720.448  (correct=1357033437.7360, error=1488929158.1841)
+   2. FP_power         effect=109501736.053  (correct=384380918.6957, error=493882654.7488)
+   3. FP_AMP2          effect=2500.534  (correct=11326.6528, error=13827.1866)
+   4. CIR762           effect=2240.713  (correct=10031.4834, error=12272.1965)
+   5. CIR761           effect=2103.855  (correct=10653.7125, error=12757.5672)
+   6. FP_AMP3          effect=1924.872  (correct=9611.6950, error=11536.5672)
+   7. CIR764           effect=1420.707  (correct=8929.6510, error=10350.3582)
+   8. CIR763           effect=1404.036  (correct=8691.8442, error=10095.8806)
+   9. CIR760           effect=1385.218  (correct=7025.0858, error=8410.3035)
+  10. FP_AMP1          effect=1364.340  (correct=8101.3418, error=9465.6816)

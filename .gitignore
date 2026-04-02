@@ -14,7 +14,7 @@ __pycache__/
 .vscode/
 .idea/
 
-# Generated plots (except submission outputs)
+# Generated plots 
 *.png
 !outputs/**/*.png
 

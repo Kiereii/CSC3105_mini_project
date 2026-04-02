@@ -9,9 +9,15 @@
 - `Dataset/`
 
 ### Include results / evidence
-- `runs/`
-  - preferably only:
-    - `runs/split_env_70_15_15_seed42/`
+- `outputs/preprocessed/`
+- `outputs/`
+  - `outputs/pair_classifier/` (plots, metrics, model artifacts)
+  - `outputs/range_regressor/` (plots, metrics, predictions)
+
+### Include analysis
+- `notebooks/`
+  - `pair_classifier_analysis.ipynb`
+  - `range_regressor_analysis.ipynb`
 
 ---
 
@@ -23,73 +29,65 @@
 - `.idea/`
 - `.ruff_cache/`
 - all `__pycache__/`
-
-### Probably exclude
 - `CSC3105_Mini_Project_2026.pdf`
-- `PROJECT_BRIEF_REQUIREMENTS_CHECKLIST.md`
-- `docs/`
+- `SUBMISSION_CHECKLIST.md`
+- `.ipynb_checkpoints/`
+- `.DS_Store`
 
 ---
 
 ## Before zipping
 
 ### 1. Check root looks clean
-Target root should look roughly like:
 
 ```text
-<submission folder>/
+UoG-DA_GroupXX/
 ├── README.md
 ├── requirements.txt
 ├── Dataset/
-├── runs/
-│   └── split_env_70_15_15_seed42/
-└── src/
+├── src/
+├── outputs/
+│   ├── preprocessed/
+│   ├── eda/
+│   ├── pair_classifier/
+│   └── range_regressor/
+└── notebooks/
 ```
 
 ### 2. Check `src/` looks clean
 
 ```text
 src/
-├── experimental/
 ├── shared/
+│   └── preprocessing/
 ├── task1/
 ├── task2/
-└── run_experiment.py
+└── experimental/
 ```
 
 ### 3. Remove Python cache folders
 Delete any:
 - `__pycache__/`
 
-### 4. Check final run exists
+### 4. Check outputs exist
 Confirm:
-- `runs/split_env_70_15_15_seed42/`
+- `outputs/pair_classifier/` has PNGs and metrics
+- `outputs/range_regressor/` has PNGs and metrics
+- `outputs/preprocessed/` has split data and config
 
-### 5. Check README exists
+### 5. Check README exists and is accurate
 Confirm:
-- `README.md`
+- `README.md` references correct file paths
 
 ---
 
 ## Recommended final folder name
 
-Use something like:
-
 ```text
 UoG-DA_GroupXX/
 ```
 
-Zip that folder for submission.
-
----
-
-## Recommended final contents
-
-- `README.md`
-- `requirements.txt`
-- `src/`
-- `Dataset/`
-- `runs/split_env_70_15_15_seed42/`
+Zip that folder as `UoG-DA.zip` for submission.
 
 ---
 
@@ -97,12 +95,14 @@ Zip that folder for submission.
 
 - [ ] `README.md` is present
 - [ ] `requirements.txt` is present
-- [ ] `src/` is present
+- [ ] `src/` is present (no `__pycache__/`)
 - [ ] `Dataset/` is present
-- [ ] `runs/split_env_70_15_15_seed42/` is present
+- [ ] `outputs/` is present with PNGs, metrics, and preprocessed data
+- [ ] `notebooks/` is present (no `.ipynb_checkpoints/`)
 - [ ] no `.venv/`
 - [ ] no `.git/`
 - [ ] no `.idea/`
 - [ ] no `.ruff_cache/`
 - [ ] no `__pycache__/`
-- [ ] no extra exploratory clutter in the submission root
+- [ ] no `.DS_Store`
+- [ ] no `CSC3105_Mini_Project_2026.pdf`

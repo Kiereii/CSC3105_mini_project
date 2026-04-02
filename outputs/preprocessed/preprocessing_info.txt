@@ -1,0 +1,26 @@
+PREPROCESSING INFORMATION
+==================================================
+
+Original dataset size: 41,568 samples
+Training set size: 29,688 samples (71.4%)
+Validation set size: 5,940 samples (14.3%)
+Test set size: 5,940 samples (14.3%)
+Number of features: 148
+  - Core features: 16
+  - CIR features: 120 (samples 730-850)
+  - Engineered features: 12
+
+Train environments: ['uwb_cleaned_dataset_part1.csv', 'uwb_cleaned_dataset_part2.csv', 'uwb_cleaned_dataset_part5.csv', 'uwb_cleaned_dataset_part6.csv', 'uwb_cleaned_dataset_part7.csv']
+Validation environments: ['uwb_cleaned_dataset_part4.csv']
+Test environments: ['uwb_cleaned_dataset_part3.csv']
+
+Random seed: 42
+Run name: split_env_70_15_15_seed42
+Split strategy: Environment-based (group split)
+
+Generated files:
+  1. X_train_unscaled.npy / X_val_unscaled.npy / X_test_unscaled.npy
+  2. X_train_standard.npy / X_val_standard.npy / X_test_standard.npy
+  3. y_train.npy / y_val.npy / y_test.npy
+  4. train_idx.npy / val_idx.npy / test_idx.npy
+  5. scaler_standard.pkl

@@ -17,7 +17,7 @@ plt.style.use("seaborn-v0_8-darkgrid")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "dt_exploratory"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -208,7 +208,7 @@ print(f"  Accuracy  : {accuracy:.4f}")
 print(f"  Max depth : {MAX_DEPTH}")
 print(f"  Features  : {len(top_features)} core + second-path")
 print()
-print("FILES SAVED TO: models/dt_exploratory/")
+print(f"FILES SAVED TO: {OUTPUT_DIR}/")
 for fn in ["dt_tree_plot.png", "dt_rules.txt", "dt_feature_importance.png"]:
     print(f"  - {fn}")
 print("=" * 80)

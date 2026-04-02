@@ -41,7 +41,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "logreg_svm"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -564,7 +564,7 @@ print()
 print("=" * 80)
 print("✨ NEXT STEPS:")
 print("   1. Copy Random Forest's ROC curve onto roc_comparison_lr_svm.png")
-print("      (load y_proba from models/random_forest/y_pred_proba.npy)")
+print("      (load y_proba from outputs/random_forest/y_pred_proba.npy)")
 print("   2. Compare feature_importance_lr/svm CSVs with RF's")
 print("      feature_importance_ranking.csv to find agreement features")
 print("   3. Discuss: LR/SVM NLOS recall vs RF — which is safer for positioning?")

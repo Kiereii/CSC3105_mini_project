@@ -44,7 +44,7 @@ except Exception as exc:
 # -----------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "range_regressor_experimental"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -431,10 +431,10 @@ print("=" * 80)
 print("\nBest model by path (lowest RMSE):")
 for path_name in ["Path 1", "Path 2"]:
     best = best_by_path[path_name]
-print(
-    f"  {path_name}: {best['model']}  "
-    f"RMSE={best['rmse']:.4f}m  MAE={best['mae']:.4f}m  R2={best['r2']:.4f}"
-)
+    print(
+        f"  {path_name}: {best['model']}  "
+        f"RMSE={best['rmse']:.4f}m  MAE={best['mae']:.4f}m  R2={best['r2']:.4f}"
+    )
 
 print("\nOutput files in:", OUTPUT_DIR.absolute())
 print("  - regression_model_comparison.csv")

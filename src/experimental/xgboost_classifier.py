@@ -42,7 +42,7 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # CONFIGURATION
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "xgboost"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

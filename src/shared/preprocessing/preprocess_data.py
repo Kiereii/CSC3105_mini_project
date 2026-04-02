@@ -18,12 +18,12 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # Configuration
-DATA_DIR = PROJECT_ROOT / "Dataset" / "UWB-LOS-NLOS-Data-Set" / "dataset" / "Cleaned"
+DATA_DIR = PROJECT_ROOT / "Dataset" / "Cleaned"
 RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 VAL_SIZE = float(os.getenv("VAL_SIZE", "0.15"))
 TEST_SIZE = float(os.getenv("TEST_SIZE", "0.15"))
 
-OUTPUT_DIR = PROJECT_ROOT / "data" / "preprocessed"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Focused CIR region

@@ -32,8 +32,8 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-DATA_DIR = PROJECT_ROOT / "Dataset" / "UWB-LOS-NLOS-Data-Set" / "dataset" / "Cleaned"
-OUTPUT_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "Dataset" / "Cleaned"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # CIR hardware constants (DW1000 datasheet)

@@ -1,13 +1,7 @@
-# Ignore trained model pickles and large binary artifacts
-models/**/*.pkl
-models/*.pkl
-models/**/*.keras
-models/*.keras
-
-# Ignore preprocessed binary data and caches
-preprocessed_data/
-runs/
+# Large binary artifacts
 *.npy
+*.pkl
+*.keras
 
 # Virtual environment
 .venv/
@@ -20,14 +14,11 @@ __pycache__/
 .vscode/
 .idea/
 
-# Generated plots/images
+# Generated plots (except submission outputs)
 *.png
+!outputs/**/*.png
 
 # Temp files
 *~
 .DS_Store
-
-# Local reference/notes docs (kept locally, not tracked in git)
-SUPERVISED_VS_UNSUPERVISED_JUSTIFICATION.md
-TASK2_DISTANCE_ESTIMATION_DETAILED.md
-XGBOOST_TUNING_CHEATSHEET.md
+.ipynb_checkpoints/

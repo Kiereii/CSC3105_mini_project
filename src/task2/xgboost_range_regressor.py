@@ -26,7 +26,7 @@ from xgboost import XGBRegressor
 # -----------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "range_regressor"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ARTIFACT_DIR = OUTPUT_DIR / "artifacts"

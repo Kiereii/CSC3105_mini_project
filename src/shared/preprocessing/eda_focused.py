@@ -19,8 +19,8 @@ plt.style.use("seaborn-v0_8-darkgrid")
 sns.set_palette("husl")
 
 # Configuration
-DATA_DIR = PROJECT_ROOT / "Dataset" / "UWB-LOS-NLOS-Data-Set" / "dataset" / "Cleaned"
-OUTPUT_DIR = PROJECT_ROOT / "eda_output_focused"
+DATA_DIR = PROJECT_ROOT / "Dataset" / "Cleaned"
+OUTPUT_DIR = PROJECT_ROOT / "outputs" / "eda"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Focus region around first path

@@ -5,17 +5,17 @@ import sys
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 STEP_SCRIPTS = {
     "preprocess": "src/shared/preprocessing/preprocess_data.py",
     "second_path": "src/shared/preprocessing/second_path_features.py",
     "dt_exploratory": "src/experimental/dt_exploratory.py",
-    "random_forest": "src/task1/random_forest_classifier.py",
+    "random_forest": "src/experimental/random_forest_classifier.py",
     "logreg_svm": "src/experimental/logreg_svm_classifier.py",
-    "xgboost": "src/task1/xgboost_classifier.py",
-    "compare": "src/task1/compare_models.py",
+    "xgboost": "src/experimental/xgboost_classifier.py",
+    "compare": "src/experimental/compare_models.py",
     "pair_classifier": "src/task1/xgboost_pair_classifier.py",
     "range_regressor": "src/experimental/range_regressor.py",
     "xgboost_range_regressor": "src/task2/xgboost_range_regressor.py",
@@ -136,7 +136,7 @@ def main() -> None:
         run_step(STEP_SCRIPTS[step], env)
 
     print("\nPipeline complete.")
-    print("Preprocessed data: data/preprocessed/")
+    print("Preprocessed data: outputs/preprocessed/")
     print("Model outputs:     outputs/")
 
 

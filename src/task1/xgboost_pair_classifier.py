@@ -1,4 +1,13 @@
-# Task 1: Pair-Level LOS/NLOS Classifier using XGBoost
+"""
+Task 1: Pair-Level LOS/NLOS Classifier using XGBoost
+=====================================================
+Classifies whether a UWB measurement contains a LOS+NLOS pair (label 0)
+or an NLOS+NLOS pair (label 1) using XGBoost with stratified cross-validation.
+
+Features: 20 core/second-path features + 120 CIR waveform samples.
+Outputs: trained model, confusion matrix, ROC curve, feature importance,
+         error analysis, and threshold optimisation plots.
+"""
 
 import os
 import time
@@ -28,7 +37,7 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-DATA_DIR = PROJECT_ROOT / "data" / "preprocessed"
+DATA_DIR = PROJECT_ROOT / "outputs" / "preprocessed"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "pair_classifier"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ARTIFACT_DIR = OUTPUT_DIR / "artifacts"
@@ -93,10 +102,18 @@ def load_pair_feature_names(path: Path, n_features: int) -> list[str]:
             continue
         if reading_core and stripped.startswith(tuple("0123456789")):
             names.append(line.split(".")[-1].strip())
+        if stripped.startswith("Aligned CIR Features"):
+            # Aligned window: features are relative to FP_IDX, not absolute CIR indices.
+            # Extract the count from the header, e.g. "Aligned CIR Features (120):"
+            reading_core = False
+            try:
+                count = int(stripped.split("(")[1].split(")")[0])
+            except (IndexError, ValueError):
+                count = 120
+            for i in range(count):
+                names.append(f"CIR_aligned_{i}")
+            break
         if stripped.startswith("CIR Features"):
-            # Extract the explicit CIR range from the file rather than
-            # hardcoding 730-850, so the names stay correct if preprocessing
-            # ever changes the focus window.
             reading_core = False
             continue
         if stripped.startswith("Range: CIR"):
@@ -104,17 +121,17 @@ def load_pair_feature_names(path: Path, n_features: int) -> list[str]:
             try:
                 parts = stripped.replace("Range:", "").strip().split()
                 cir_start = int(parts[0].replace("CIR", ""))
-                cir_end = int(parts[2].replace("CIR", "")) + 1  # inclusive end
+                cir_end = int(parts[2].replace("CIR", "")) + 1
             except (IndexError, ValueError):
-                cir_start, cir_end = 730, 850  # safe default
+                cir_start, cir_end = 730, 850
             for i in range(cir_start, cir_end):
                 names.append(f"CIR{i}")
             break
 
     # If CIR block was never found, append a fallback range
-    if cir_start is None:
-        for i in range(730, 850):
-            names.append(f"CIR{i}")
+    if cir_start is None and not any(n.startswith("CIR") for n in names):
+        for i in range(120):
+            names.append(f"CIR_aligned_{i}")
 
     # Guard: if parsed count disagrees with the actual feature matrix width,
     # fall back to generic names so importance plots are not silently wrong.
@@ -536,7 +553,7 @@ with open(OUTPUT_DIR / "pair_results.txt", "w") as f:
     f.write("=" * 60 + "\n\n")
     f.write("Task: LOS+NLOS vs NLOS+NLOS pair classification\n")
     f.write("Model: XGBoost\n")
-    f.write("Features: 20 core+second-path + 120 CIR = 140 total\n")
+    f.write(f"Features: {X_train.shape[1]} total (core+second-path + aligned CIR)\n")
     f.write(f"Training samples: {len(X_train):,}\n")
     f.write(f"Test samples    : {len(X_test):,}\n\n")
 
@@ -611,7 +628,7 @@ print(f"  Accuracy  : {accuracy:.4f}")
 print(f"  F1-Score  : {f1:.4f}")
 print(f"  ROC-AUC   : {auc:.4f}")
 print()
-print("FILES SAVED TO: models/pair_classifier/")
+print(f"FILES SAVED TO: {OUTPUT_DIR}/")
 for fn in [
     "pair_feature_importance_xgb.csv",
     "pair_feature_importance_by_category_xgb.csv",
@@ -620,7 +637,7 @@ for fn in [
     "pair_error_analysis_xgb.txt",
 ]:
     print(f"  - {fn}")
-print("ARTIFACTS SAVED TO: models/pair_classifier/artifacts/")
+print(f"ARTIFACTS SAVED TO: {ARTIFACT_DIR}/")
 for fn in [
     "pair_xgb_model.pkl",
     "pair_confusion_matrix.npy",

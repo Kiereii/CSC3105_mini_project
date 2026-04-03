@@ -1,9 +1,10 @@
 """
-UWB LOS/NLOS - Range Estimator (XGBoost Only)
-==============================================
-Standalone XGBoost regressor pipeline extracted from range_regressor.py.
+Task 2: Range Estimation for Dominant Paths using XGBoost
+=========================================================
+Estimates the range (distance) for the two dominant CIR paths using
+separate XGBoost regressors with optional K-Fold cross-validation.
 
-Run second_path_features.py FIRST to generate the input .npy files.
+Features: 30 core/second-path/engineered features + 120 CIR waveform samples.
 """
 
 from pathlib import Path

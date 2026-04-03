@@ -5,8 +5,6 @@ Classifies whether a UWB measurement contains a LOS+NLOS pair (label 0)
 or an NLOS+NLOS pair (label 1) using XGBoost with stratified cross-validation.
 
 Features: 20 core/second-path features + 120 CIR waveform samples.
-Outputs: trained model, confusion matrix, ROC curve, feature importance,
-         error analysis, and threshold optimisation plots.
 """
 
 import os

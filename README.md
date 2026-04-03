@@ -1,6 +1,7 @@
 # CSC3105 Data Analytics and AI Mini Project
 
 **GitHub:** https://github.com/Kiereii/CSC3105_mini_project
+**Youtube:** https://youtu.be/koB7NhexEbc
 
 ## Project overview
 

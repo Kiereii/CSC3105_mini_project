@@ -2,6 +2,7 @@
 
 **GitHub:** https://github.com/Kiereii/CSC3105_mini_project
 **Youtube:** https://youtu.be/koB7NhexEbc
+**Overleaf:** https://www.overleaf.com/project/69d0025d6234965b3ea9a59d
 
 ## Project overview
 
